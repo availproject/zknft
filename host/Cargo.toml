@@ -1,0 +1,16 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+risc0-zkvm = { version = "0.15.3", features = ["metal"] }
+serde = "1.0"
+nft_core = { path = "../core", features = ["native"] }
+rs_merkle = "1.4.1"
+serde_json = "1.0.103"
+jmt = "0.6.0"
+sov-db = { git = "https://github.com/Sovereign-Labs/sovereign-sdk" }
+primitive-types = "0.12.1"
+sha2 = "0.10.7"
+methods = { path = "../methods" }
