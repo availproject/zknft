@@ -1,12 +1,12 @@
-#[cfg(feature = "native")]
-use rocksdb::{IteratorMode, DB};
 use core::fmt::Error;
-use fuel_merkle::storage::{Mappable, StorageInspect, StorageMutate};
-use std::borrow::Cow;
 use fuel_merkle::common::Bytes32;
 use fuel_merkle::sparse::Primitive;
-use std::collections::HashMap;
+use fuel_merkle::storage::{Mappable, StorageInspect, StorageMutate};
+#[cfg(feature = "native")]
+use rocksdb::{IteratorMode, DB};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::collections::HashMap;
 
 pub struct NftTable;
 
@@ -44,10 +44,10 @@ impl ZkStorage {
         ZkStorage { hashmap }
     }
 
-    pub fn new () -> Self {
-      let mut hashmap: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+    pub fn new() -> Self {
+        let mut hashmap: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
 
-      ZkStorage { hashmap }
+        ZkStorage { hashmap }
     }
 }
 

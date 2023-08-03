@@ -1,6 +1,5 @@
 use rocksdb::{Error as RocksdbError, Options, DB};
 
-
 use crate::zk_storage::NftTable;
 use fuel_merkle::storage::{Mappable, StorageInspect, StorageMutate};
 use std::borrow::Cow;
@@ -24,7 +23,7 @@ impl NativeStorage {
     }
 
     pub fn db_asref(&self) -> &DB {
-      &self.db
+        &self.db
     }
 }
 
