@@ -34,9 +34,9 @@ impl Value for Nft {
         let mut hasher = ShaHasher::new();
         let serialized = bincode::serialize(&self).unwrap();
         hasher.0.update(&serialized);
-        let hash = hasher.finish();
+        
 
-        hash
+        hasher.finish()
     }
 
     fn zero() -> Self {

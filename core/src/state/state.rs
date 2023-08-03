@@ -7,8 +7,7 @@ use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
 use sparse_merkle_tree::{
     default_store::DefaultStore,
     traits::Value,
-    traits::{Hasher, StoreReadOps, StoreWriteOps},
-    MerkleProof, SparseMerkleTree, H256,
+    traits::{Hasher}, SparseMerkleTree, H256,
 };
 use std::cmp::PartialEq;
 
@@ -16,11 +15,11 @@ use std::cmp::PartialEq;
 pub struct ShaHasher(pub Sha256);
 impl Hasher for ShaHasher {
     fn write_h256(&mut self, h: &H256) {
-        self.0.update(&h.as_slice())
+        self.0.update(h.as_slice())
     }
 
     fn write_byte(&mut self, b: u8) {
-        self.0.update(&[b])
+        self.0.update([b])
     }
 
     fn finish(self) -> H256 {
@@ -81,11 +80,11 @@ impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> State<V>
                     Ok(Some(i))
                 }
             }
-            Err(e) => Err(Error::from(StateError::ErroneousState)),
+            Err(_e) => Err(Error::from(StateError::ErroneousState)),
         }
     }
 
     pub fn get_root(&self) -> H256 {
-        self.tree.root().clone()
+        *self.tree.root()
     }
 }

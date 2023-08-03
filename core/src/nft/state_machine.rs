@@ -6,13 +6,12 @@ use crate::{
     types::StateUpdate,
 };
 use primitive_types::U256;
-use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
-use serde::{Deserialize, Serialize};
+use risc0_zkvm::sha::rust_crypto::{Digest as _};
+
 use sparse_merkle_tree::{
-    default_store::DefaultStore, error::Error as SMTError, traits::Hasher, traits::Value,
-    MerkleProof, SparseMerkleTree, H256,
+    traits::Value,
 };
-use std::fmt;
+
 
 pub struct NftStateMachine {
     pub state: State<Nft>,
@@ -66,7 +65,7 @@ impl StateMachine<Nft> for NftStateMachine {
 
 impl NftStateMachine {
     fn transfer(&mut self, params: NftCallParams) -> Result<StateUpdate<Nft>, Error> {
-        let nft_key = params.id.get_key();
+        let _nft_key = params.id.get_key();
 
         let mut nft1 = Nft {
             id: NftId(U256::from_dec_str("1").unwrap()),
@@ -77,7 +76,7 @@ impl NftStateMachine {
             owner: String::from("EFGH"),
         };
 
-        let mut vec: Vec<&mut Nft> = vec![&mut nft1, &mut nft2];
+        let vec: Vec<&mut Nft> = vec![&mut nft1, &mut nft2];
 
         let nft_to_transfer = match vec.into_iter().find(|nft| nft.id == params.id) {
             Some(i) => i.clone(),
@@ -105,7 +104,7 @@ impl NftStateMachine {
         let nft_key = params.id.get_key();
 
         match self.state.get(&nft_key) {
-            Ok(Some(i)) => panic!("Already minted"),
+            Ok(Some(_i)) => panic!("Already minted"),
             Err(e) => return Err(e),
             Ok(None) => (),
         }
@@ -127,7 +126,7 @@ impl NftStateMachine {
 
         let mut nft: Nft = match self.state.get(&nft_key) {
             Ok(Some(i)) => i,
-            Err(e) => panic!("Error in finding nft"),
+            Err(_e) => panic!("Error in finding nft"),
             Ok(None) => panic!("Nft does not exist"),
         };
 

@@ -6,13 +6,10 @@ use crate::{
   types::StateUpdate,
 };
 use primitive_types::U256;
-use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
-use serde::{Deserialize, Serialize};
-use sparse_merkle_tree::{
-  default_store::DefaultStore, error::Error as SMTError, traits::Hasher, traits::Value,
-  MerkleProof, SparseMerkleTree, H256,
-};
-use std::fmt;
+use risc0_zkvm::sha::rust_crypto::{Digest as _};
+
+
+
 
 pub struct PaymentsStateMachine {
   pub state: State<Account>,
@@ -65,7 +62,7 @@ impl PaymentsStateMachine {
 
       let mut from_account: Account = match self.state.get(&from_address_key) {
         Ok(Some(i)) => i,
-        Err(e) => panic!("Error in finding account details"),
+        Err(_e) => panic!("Error in finding account details"),
         Ok(None) => panic!("Account has no balance"),
       };
 
@@ -77,7 +74,7 @@ impl PaymentsStateMachine {
 
       let mut to_account = match self.state.get(&to_address_key) {
         Ok(Some(i)) => i,
-        Err(e) => panic!("Error in finding account details"),
+        Err(_e) => panic!("Error in finding account details"),
         Ok(None) => Account {
           address: params.to, 
           balance: 0
@@ -96,7 +93,7 @@ impl PaymentsStateMachine {
 
       let mut to_account = match self.state.get(&to_address_key) {
         Ok(Some(i)) => i,
-        Err(e) => panic!("Error in finding account details"),
+        Err(_e) => panic!("Error in finding account details"),
         Ok(None) => Account {
           address: params.to, 
           balance: 0

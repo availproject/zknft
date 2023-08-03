@@ -1,18 +1,16 @@
 use crate::{
     errors::Error,
-    payments::types::{CallType, Account, CallParams as PaymentsCallParams, Address},
-    state::State,
+    payments::types::{CallType, Account, CallParams as PaymentsCallParams},
     traits::{Leaf, ZkVMStateMachine},
     types::{ShaHasher, StateUpdate},
 };
-use primitive_types::U256;
-use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
-use serde::{Deserialize, Serialize};
+
+use risc0_zkvm::sha::rust_crypto::{Digest as _};
+
 use sparse_merkle_tree::{
-    default_store::DefaultStore, error::Error as SMTError, traits::Hasher, traits::Value,
-    MerkleProof, SparseMerkleTree, H256,
+    traits::Value,
 };
-use std::fmt;
+
 
 pub struct PaymentsStateMachine {}
 
@@ -36,7 +34,7 @@ impl ZkVMStateMachine<Account> for PaymentsStateMachine {
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => return Err(Error::Unknown),
-            Err(i) => return Err(Error::Unknown),
+            Err(_i) => return Err(Error::Unknown),
         };
 
         let call_result: Result<Vec<Account>, Error> = match params.call_type {
@@ -58,7 +56,7 @@ impl ZkVMStateMachine<Account> for PaymentsStateMachine {
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => return Err(Error::Unknown),
-            Err(i) => return Err(Error::Unknown),
+            Err(_i) => return Err(Error::Unknown),
         };
 
         Ok(())
@@ -81,7 +79,7 @@ impl PaymentsStateMachine {
     }
 
     fn mint(&self, params: PaymentsCallParams, account: Account) -> Result<Vec<Account>, Error> {
-        let mut to_account = account.clone();
+        let mut to_account = account;
 
         to_account.balance += params.amount; 
         

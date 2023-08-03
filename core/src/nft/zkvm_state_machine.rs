@@ -1,18 +1,16 @@
 use crate::{
     errors::Error,
-    nft::types::{CallType, Nft, NftCallParams, NftId},
-    state::State,
+    nft::types::{CallType, Nft, NftCallParams},
     traits::{Leaf, ZkVMStateMachine},
     types::{ShaHasher, StateUpdate},
 };
-use primitive_types::U256;
-use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
-use serde::{Deserialize, Serialize};
+
+use risc0_zkvm::sha::rust_crypto::{Digest as _};
+
 use sparse_merkle_tree::{
-    default_store::DefaultStore, error::Error as SMTError, traits::Hasher, traits::Value,
-    MerkleProof, SparseMerkleTree, H256,
+    traits::Value,
 };
-use std::fmt;
+
 
 pub struct NftStateMachine {}
 
@@ -36,7 +34,7 @@ impl ZkVMStateMachine<Nft> for NftStateMachine {
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => return Err(Error::Unknown),
-            Err(i) => return Err(Error::Unknown),
+            Err(_i) => return Err(Error::Unknown),
         };
 
         let call_result: Result<Nft, Error> = match params.call_type {
@@ -59,7 +57,7 @@ impl ZkVMStateMachine<Nft> for NftStateMachine {
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => return Err(Error::Unknown),
-            Err(i) => return Err(Error::Unknown),
+            Err(_i) => return Err(Error::Unknown),
         };
 
         Ok(())
