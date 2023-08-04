@@ -1,8 +1,8 @@
-use methods::{TRANSFER_ELF, TRANSFER_ID};
+use payments_methods::{TRANSFER_ELF, TRANSFER_ID};
 use nft_core::{
-    nft::{
-        state_machine::{NftStateMachine},
-        types::{Nft, NftId,CallType, NftCallParams},
+    payments::{
+        state_machine::PaymentsStateMachine, 
+        types::{Account, Address, CallType, CallParams}
     },
     traits::StateMachine,
 };
@@ -21,16 +21,18 @@ use std::time::SystemTime;
 
 fn main() {
     let now = SystemTime::now();
-    let mut state_machine = NftStateMachine::new();
-    let nft_to_transfer = Nft {
-        id: NftId(U256::from_dec_str("2").unwrap()),
-        owner: String::from("EFGH"),
-    };
+    let mut state_machine = PaymentsStateMachine::new();
+    
+    let mut address_in_bytes = [0u8; 32];
+    let mut address2_in_bytes = [0u8; 32];
 
-    let call_params = NftCallParams {
-        id: nft_to_transfer.id.clone(),
-        owner: Some(String::from("ABCD")),
-        from: String::from("EFGH"),
+    U256::from_dec_str("1").unwrap().to_big_endian(&mut address_in_bytes);
+    U256::from_dec_str("2").unwrap().to_big_endian(&mut address2_in_bytes);
+
+    let call_params = CallParams {
+        from: Address(address_in_bytes),
+        to: Address(address2_in_bytes), 
+        amount: 100,
         call_type: CallType::Transfer,
     };
 

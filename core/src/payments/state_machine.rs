@@ -23,7 +23,7 @@ impl StateMachine<Account> for PaymentsStateMachine {
       let mut address2_in_bytes = [0u8; 32];
 
       U256::from_dec_str("1").unwrap().to_big_endian(&mut address_in_bytes);
-      U256::from_dec_str("1").unwrap().to_big_endian(&mut address2_in_bytes);
+      U256::from_dec_str("2").unwrap().to_big_endian(&mut address2_in_bytes);
 
       let account1 = Account {
           address: Address(address_in_bytes),

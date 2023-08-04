@@ -1,3 +1,3 @@
-mod types;
-mod state_machine;
-mod zkvm_state_machine;
+pub mod types;
+pub mod state_machine;
+pub mod zkvm_state_machine;

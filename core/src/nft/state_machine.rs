@@ -7,11 +7,9 @@ use crate::{
 };
 use primitive_types::U256;
 use risc0_zkvm::sha::rust_crypto::{Digest as _};
-
 use sparse_merkle_tree::{
     traits::Value,
 };
-
 
 pub struct NftStateMachine {
     pub state: State<Nft>,
@@ -65,28 +63,13 @@ impl StateMachine<Nft> for NftStateMachine {
 
 impl NftStateMachine {
     fn transfer(&mut self, params: NftCallParams) -> Result<StateUpdate<Nft>, Error> {
-        let _nft_key = params.id.get_key();
+        let nft_key = params.id.get_key();
 
-        let mut nft1 = Nft {
-            id: NftId(U256::from_dec_str("1").unwrap()),
-            owner: String::from("ABCD"),
+        let nft_to_transfer =  match self.state.get(&nft_key) {
+            Ok(Some(i)) => i,
+            Err(e) => return Err(e),
+            Ok(None) => return Err(Error::Unknown),
         };
-        let mut nft2 = Nft {
-            id: NftId(U256::from_dec_str("2").unwrap()),
-            owner: String::from("EFGH"),
-        };
-
-        let vec: Vec<&mut Nft> = vec![&mut nft1, &mut nft2];
-
-        let nft_to_transfer = match vec.into_iter().find(|nft| nft.id == params.id) {
-            Some(i) => i.clone(),
-            None => panic!("NFT not found."),
-        };
-
-        // let pre_merkle_proof = self.state.merkle_proof(vec![nft_key]).unwrap();
-        // let pre_state_root = self.state.root().clone();
-
-        // println!("Owner: {:?} From: {:?}", nft_to_transfer.owner, from);
 
         if nft_to_transfer.owner != params.from {
             panic!("Not owner");

@@ -1,8 +1,10 @@
 [workspace]
 members = [
-    "host",
-    "methods",
-    "core"
+    "nft_app/host",
+    "nft_app/methods",
+    "core", 
+    "payments_app/host",
+    "payments_app/methods",
 ]
 
 # Always optimize; building and running the guest takes much longer without optimization.
