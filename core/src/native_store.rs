@@ -12,18 +12,18 @@ pub struct NativeStore {
     db: DB,
 }
 
-impl StateMachineStore {
+impl NativeStore {
     pub fn from_path(path: String) -> Self {
         let mut db_options = Options::default();
         db_options.create_if_missing(true);
 
         let db = DB::open(&db_options, path).unwrap();
 
-        StateMachineStore { db }
+        NativeStore { db }
     }
 
     pub fn with_db(db: DB) -> Self {
-        StateMachineStore { db }
+        NativeStore { db }
     }
 
     pub fn db_asref(&self) -> &DB {
@@ -31,7 +31,7 @@ impl StateMachineStore {
     }
 }
 
-impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for StateMachineStore {
+impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for NativeStore {
     fn get_branch(&self, branch_key: &BranchKey) -> Result<Option<BranchNode>, Error> {
         let serialized_key = match serialize(&branch_key) {
             Err(e) => return Err(Error::Store(e.to_string())),
@@ -55,7 +55,7 @@ impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for StateMachineStore {
     }
 }
 
-impl<V: Serialize> StoreWriteOps<V> for StateMachineStore {
+impl<V: Serialize> StoreWriteOps<V> for NativeStore {
     fn insert_branch(&mut self, node_key: BranchKey, branch: BranchNode) -> Result<(), Error> {
         let serialized_key = match serialize(&node_key) {
             Err(e) => return Err(Error::Store(e.to_string())),
