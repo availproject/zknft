@@ -5,9 +5,7 @@ use crate::{
 };
 use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
 use sparse_merkle_tree::{
-    default_store::DefaultStore,
-    traits::Value,
-    traits::{Hasher}, SparseMerkleTree, H256,
+    default_store::DefaultStore, traits::Hasher, traits::Value, SparseMerkleTree, H256,
 };
 use std::cmp::PartialEq;
 

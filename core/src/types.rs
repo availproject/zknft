@@ -1,11 +1,6 @@
-
-
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
-use sparse_merkle_tree::{
-    traits::{Hasher},
-    MerkleProof, H256,
-};
+use sparse_merkle_tree::{traits::Hasher, MerkleProof, H256};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);

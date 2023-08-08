@@ -5,12 +5,9 @@ use crate::{
     types::{ShaHasher, StateUpdate},
 };
 
-use risc0_zkvm::sha::rust_crypto::{Digest as _};
+use risc0_zkvm::sha::rust_crypto::Digest as _;
 
-use sparse_merkle_tree::{
-    traits::Value,
-};
-
+use sparse_merkle_tree::traits::Value;
 
 pub struct NftStateMachine {}
 

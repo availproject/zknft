@@ -6,10 +6,8 @@ use crate::{
     types::StateUpdate,
 };
 use primitive_types::U256;
-use risc0_zkvm::sha::rust_crypto::{Digest as _};
-use sparse_merkle_tree::{
-    traits::Value,
-};
+use risc0_zkvm::sha::rust_crypto::Digest as _;
+use sparse_merkle_tree::traits::Value;
 
 pub struct NftStateMachine {
     pub state: State<Nft>,
@@ -65,7 +63,7 @@ impl NftStateMachine {
     fn transfer(&mut self, params: NftCallParams) -> Result<StateUpdate<Nft>, Error> {
         let nft_key = params.id.get_key();
 
-        let nft_to_transfer =  match self.state.get(&nft_key) {
+        let nft_to_transfer = match self.state.get(&nft_key) {
             Ok(Some(i)) => i,
             Err(e) => return Err(e),
             Ok(None) => return Err(Error::Unknown),

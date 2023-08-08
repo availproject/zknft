@@ -49,14 +49,14 @@ impl Value for Account {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum CallType {
-  Transfer, 
-  Mint
+    Transfer,
+    Mint,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CallParams {
-  pub from: Address, 
-  pub to: Address, 
-  pub amount: u64, 
-  pub call_type: CallType
+    pub from: Address,
+    pub to: Address,
+    pub amount: u64,
+    pub call_type: CallType,
 }
