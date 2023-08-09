@@ -1,15 +1,14 @@
 use crate::{
     errors::Error,
     payments::types::{Account, Address, CallParams as PaymentsCallParams, CallType},
-    state::State,
-    traits::{Leaf, StateMachine},
+    state::VmState,
+    traits::StateMachine,
     types::StateUpdate,
 };
 use primitive_types::U256;
-use risc0_zkvm::sha::rust_crypto::Digest as _;
 
 pub struct PaymentsStateMachine {
-    pub state: State<Account>,
+    pub state: VmState<Account>,
 }
 
 impl StateMachine<Account> for PaymentsStateMachine {
@@ -35,7 +34,7 @@ impl StateMachine<Account> for PaymentsStateMachine {
             balance: 1000,
         };
 
-        let mut state = State::new();
+        let mut state = VmState::new();
 
         state
             .update_set(vec![account1, account2])

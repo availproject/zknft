@@ -1,3 +1,3 @@
 pub mod state_machine;
+pub mod state_transition;
 pub mod types;
-pub mod zkvm_state_machine;

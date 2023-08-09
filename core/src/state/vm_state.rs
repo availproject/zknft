@@ -27,13 +27,19 @@ impl Hasher for ShaHasher {
     }
 }
 
-pub struct State<V: Value> {
+pub struct VmState<V: Value> {
     tree: SparseMerkleTree<ShaHasher, V, DefaultStore<V>>,
 }
 
-impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> State<V> {
+impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> Default for VmState<V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> VmState<V> {
     pub fn new() -> Self {
-        State {
+        VmState {
             tree: SparseMerkleTree::default(),
         }
     }

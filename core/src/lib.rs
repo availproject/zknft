@@ -8,3 +8,4 @@ pub mod payments;
 pub mod state;
 pub mod traits;
 pub mod types;
+pub mod zkvm_state_machine;

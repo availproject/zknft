@@ -1,3 +1,3 @@
-mod state;
+mod vm_state;
 
-pub use self::state::State;
+pub use self::vm_state::VmState;

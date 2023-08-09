@@ -1,5 +1,5 @@
 use bincode::{deserialize, serialize};
-use rocksdb::{Error as RocksdbError, Options, DB};
+use rocksdb::{Options, DB};
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::error::Error;
 use sparse_merkle_tree::traits::{StoreReadOps, StoreWriteOps};
@@ -29,6 +29,38 @@ impl NativeStore {
     pub fn db_asref(&self) -> &DB {
         &self.db
     }
+
+    pub fn get<V: for<'a> Deserialize<'a>>(
+        &self,
+        serialized_key: &[u8],
+    ) -> Result<Option<V>, Error> {
+        match self.db.get(serialized_key) {
+            Err(e) => Err(Error::Store(e.to_string())),
+            Ok(None) => Ok(None),
+            Ok(Some(i)) => Ok(deserialize(&i).unwrap()),
+        }
+    }
+
+    pub fn put<V: Serialize>(&self, serialized_key: &[u8], value: &V) -> Result<(), Error> {
+        match self
+            .db
+            .put(serialized_key, bincode::serialize(&value).unwrap())
+        {
+            Err(e) => Err(Error::Store(e.to_string())),
+            _ => Ok(()),
+        }
+    }
+
+    pub fn delete(&self, serialized_key: &[u8]) -> Result<(), Error> {
+        match self.db.get(&serialized_key) {
+            Err(e) => Err(Error::Store(e.to_string())),
+            Ok(Some(_)) => match self.db.delete(&serialized_key) {
+                Err(e) => Err(Error::Store(e.to_string())),
+                _ => Ok(()),
+            },
+            Ok(None) => Ok(()),
+        }
+    }
 }
 
 impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for NativeStore {
@@ -38,20 +70,13 @@ impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for NativeStore {
             Ok(i) => i,
         };
 
-        match self.db.get(&serialized_key) {
-            Err(e) => Err(Error::Store(e.to_string())),
-            Ok(None) => Ok(None),
-            Ok(Some(i)) => Ok(deserialize(&i).unwrap()),
-        }
+        self.get(&serialized_key)
     }
+
     fn get_leaf(&self, leaf_key: &H256) -> Result<Option<V>, Error> {
         let key = leaf_key.as_slice();
 
-        match self.db.get(&key) {
-            Err(e) => Err(Error::Store(e.to_string())),
-            Ok(None) => Ok(None),
-            Ok(Some(i)) => Ok(deserialize(&i).unwrap()),
-        }
+        self.get(&key)
     }
 }
 
@@ -62,48 +87,25 @@ impl<V: Serialize> StoreWriteOps<V> for NativeStore {
             Ok(i) => i,
         };
 
-        match self
-            .db
-            .put(serialized_key, bincode::serialize(&branch).unwrap())
-        {
-            Err(e) => Err(Error::Store(e.to_string())),
-            _ => Ok(()),
-        }
+        self.put(&serialized_key, &branch)
     }
+
     fn insert_leaf(&mut self, leaf_key: H256, leaf: V) -> Result<(), Error> {
-        match self
-            .db
-            .put(leaf_key.as_slice(), bincode::serialize(&leaf).unwrap())
-        {
-            Err(e) => Err(Error::Store(e.to_string())),
-            _ => Ok(()),
-        }
+        self.put(leaf_key.as_slice(), &leaf)
     }
+
     fn remove_branch(&mut self, node_key: &BranchKey) -> Result<(), Error> {
         let serialized_key = match serialize(&node_key) {
             Err(e) => return Err(Error::Store(e.to_string())),
             Ok(i) => i,
         };
 
-        match self.db.get(&serialized_key) {
-            Err(e) => Err(Error::Store(e.to_string())),
-            Ok(Some(i)) => match self.db.delete(&serialized_key) {
-                Err(e) => Err(Error::Store(e.to_string())),
-                _ => Ok(()),
-            },
-            Ok(None) => Ok(()),
-        }
+        self.delete(&serialized_key)
     }
-    fn remove_leaf(&mut self, leaf_key: &H256) -> Result<(), Error> {
-      let serialized_key = leaf_key.as_slice();
 
-      match self.db.get(&serialized_key) {
-          Err(e) => Err(Error::Store(e.to_string())),
-          Ok(Some(i)) => match self.db.delete(&serialized_key) {
-              Err(e) => Err(Error::Store(e.to_string())),
-              _ => Ok(()),
-          },
-          Ok(None) => Ok(()),
-      }
+    fn remove_leaf(&mut self, leaf_key: &H256) -> Result<(), Error> {
+        let serialized_key = leaf_key.as_slice();
+
+        self.delete(&serialized_key)
     }
 }
