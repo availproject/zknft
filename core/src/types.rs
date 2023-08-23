@@ -1,4 +1,6 @@
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
+#[cfg(feature = "native")]
+use risc0_zkvm::SessionReceipt;
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::{traits::Hasher, MerkleProof, H256};
 
@@ -38,4 +40,21 @@ pub struct StateUpdate<S> {
     pub post_state_root: H256,
     pub pre_state_with_proof: (Vec<S>, MerkleProof),
     pub post_state_with_proof: (Vec<S>, MerkleProof),
+}
+
+#[cfg(feature = "native")]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BatchHeader {
+    pub pre_state_root: H256,
+    pub state_root: H256, 
+    pub transactions_root: H256,
+    pub batch_number: u64, 
+    pub receipt: SessionReceipt
+}
+
+#[cfg(feature = "native")]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Batch<T> {
+    pub header: BatchHeader,
+    pub transactions: Vec<T>
 }

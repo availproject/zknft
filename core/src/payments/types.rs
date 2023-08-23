@@ -54,7 +54,7 @@ pub enum CallType {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct CallParams {
+pub struct Transaction {
     pub from: Address,
     pub to: Address,
     pub amount: u64,

@@ -1,4 +1,4 @@
-use crate::{traits::Leaf, types::ShaHasher};
+use crate::{traits::{Leaf, TxHasher}, types::ShaHasher};
 use primitive_types::U256;
 use risc0_zkvm::sha::rust_crypto::Digest;
 use serde::{Deserialize, Serialize};
@@ -57,9 +57,19 @@ pub enum CallType {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct NftCallParams {
+pub struct NftTransaction {
     pub id: NftId,
     pub owner: Option<String>,
     pub from: String,
     pub call_type: CallType,
+}
+
+impl TxHasher for NftTransaction {
+    fn to_h256(&self) -> H256 {
+        let mut hasher = ShaHasher::new();
+        let serialized = bincode::serialize(&self).unwrap();
+        hasher.0.update(&serialized);
+
+        hasher.finish()
+    }
 }

@@ -1,11 +1,16 @@
 use crate::{
     errors::{Error, StateError},
+    state::MerkleStore,
     traits::Leaf,
     types::StateUpdate,
 };
 use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sparse_merkle_tree::{
-    default_store::DefaultStore, traits::Hasher, traits::Value, SparseMerkleTree, H256,
+    default_store::DefaultStore,
+    traits::Hasher,
+    traits::{StoreReadOps, StoreWriteOps, Value},
+    SparseMerkleTree, H256,
 };
 use std::cmp::PartialEq;
 
@@ -27,31 +32,46 @@ impl Hasher for ShaHasher {
     }
 }
 
-pub struct VmState<V: Value> {
-    tree: SparseMerkleTree<ShaHasher, V, DefaultStore<V>>,
+//TODO - Replace MerkleStore with a generic so any backing store could be used.
+pub struct VmState<V> {
+    tree: SparseMerkleTree<ShaHasher, V, MerkleStore>,
 }
 
-impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> Default for VmState<V> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> Default for VmState<V> {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
-impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> VmState<V> {
-    pub fn new() -> Self {
+impl<
+        V: Value
+            + std::default::Default
+            + Clone
+            + Leaf<H256>
+            + PartialEq
+            + DeserializeOwned
+            + Serialize,
+    > VmState<V>
+{
+    pub fn new(root: H256) -> Self {
         VmState {
-            tree: SparseMerkleTree::default(),
+            tree: SparseMerkleTree::new(
+                root,
+                MerkleStore::from_path(String::from(
+                "./app_node",
+                ))
+            ),
         }
     }
 
-    //TODO - Load a tree for persistent storage.
-
     pub fn update_set(&mut self, set: Vec<V>) -> Result<StateUpdate<V>, Error> {
         let pre_state_root = self.get_root();
+
         let pre_merkle_proof = self
             .tree
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
+
         let pre_merkle_set = set
             .iter()
             .map(|v| self.tree.get(&v.get_key()).expect("Cannot get from tree."))
@@ -84,7 +104,7 @@ impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> VmState<
                     Ok(Some(i))
                 }
             }
-            Err(_e) => Err(Error::from(StateError::ErroneousState)),
+            Err(_e) => Err(Error::StateError(StateError::ErroneousState)),
         }
     }
 

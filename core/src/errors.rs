@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Error, Debug, Serialize, Deserialize)]
+#[derive(Error, Debug, Serialize, Deserialize, Clone)]
 pub enum StateError {
     #[error("Update to state failed.")]
     Update,
@@ -9,12 +9,14 @@ pub enum StateError {
     ErroneousState,
 }
 
-#[derive(Error, Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DBError(pub String);
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Error {
-    #[error("State error: {0}.")]
-    StateError(#[from] StateError),
-    #[error("Unknown error")]
+    StateError(StateError),
     Unknown,
+    DBError(DBError),
 }
 
 impl Error {

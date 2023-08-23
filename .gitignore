@@ -3,3 +3,5 @@ Cargo.lock
 methods/guest/Cargo.lock
 target/
 demo_data/
+app_node/
+node_db/

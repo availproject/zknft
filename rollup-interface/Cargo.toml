@@ -1,0 +1,44 @@
+[package]
+name = "sov-rollup-interface"
+description = "Defines interfaces for building rollups with the Sovereign SDK"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+homepage = "https://www.sovereign.xyz"
+publish = false
+repository = "https://github.com/sovereign-labs/sovereign-sdk"
+rust-version = "1.66"
+readme = "README.md"
+resolver = "2"
+exclude = [
+    "specs/assets/*",
+]
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.71"
+borsh = { version = "0.10.3", features = ["rc"] }
+serde = { version = "1.0.137", features = ["derive", "rc"] }
+bytes = "1.2.1"
+hex = "0.4.3"
+sha2 = { version = "0.10.6", optional = true }
+digest = { version = "0.10.6"}
+
+anyhow = "1.0.68"
+
+# Proptest should be a dev-dependency, but those can't be optional
+proptest = { version = "1.0.0", optional = true }
+proptest-derive = { version = "0.3.0", optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+proptest = { version = "1.0.0"}
+proptest-derive = { version = "0.3.0"}
+
+[features]
+default = []
+fuzzing = ["proptest", "proptest-derive", "sha2"]
+mocks = ["sha2", "bytes/serde"]

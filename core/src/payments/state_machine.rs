@@ -1,6 +1,6 @@
 use crate::{
     errors::Error,
-    payments::types::{Account, Address, CallParams as PaymentsCallParams, CallType},
+    payments::types::{Account, Address, Transaction as PaymentsTransaction, CallType},
     state::VmState,
     traits::StateMachine,
     types::StateUpdate,
@@ -12,7 +12,7 @@ pub struct PaymentsStateMachine {
 }
 
 impl StateMachine<Account> for PaymentsStateMachine {
-    type CallParams = PaymentsCallParams;
+    type Transaction = PaymentsTransaction;
 
     fn new() -> Self {
         let mut address_in_bytes = [0u8; 32];
@@ -34,7 +34,7 @@ impl StateMachine<Account> for PaymentsStateMachine {
             balance: 1000,
         };
 
-        let mut state = VmState::new();
+        let mut state = VmState::new(None);
 
         state
             .update_set(vec![account1, account2])
@@ -43,7 +43,7 @@ impl StateMachine<Account> for PaymentsStateMachine {
         PaymentsStateMachine { state }
     }
 
-    fn call(&mut self, params: PaymentsCallParams) -> Result<StateUpdate<Account>, Error> {
+    fn call(&mut self, params: PaymentsTransaction) -> Result<StateUpdate<Account>, Error> {
         match params.call_type {
             CallType::Transfer => self.transfer(params),
             CallType::Mint => self.mint(params),
@@ -56,7 +56,7 @@ impl StateMachine<Account> for PaymentsStateMachine {
 }
 
 impl PaymentsStateMachine {
-    fn transfer(&mut self, params: PaymentsCallParams) -> Result<StateUpdate<Account>, Error> {
+    fn transfer(&mut self, params: PaymentsTransaction) -> Result<StateUpdate<Account>, Error> {
         let from_address_key = params.from.get_key();
         let to_address_key = params.to.get_key();
 
@@ -86,7 +86,7 @@ impl PaymentsStateMachine {
         self.state.update_set(vec![from_account, to_account])
     }
 
-    fn mint(&mut self, params: PaymentsCallParams) -> Result<StateUpdate<Account>, Error> {
+    fn mint(&mut self, params: PaymentsTransaction) -> Result<StateUpdate<Account>, Error> {
         let to_address_key = params.to.get_key();
 
         //TODO: Some check to ensure admin is minting.

@@ -1,6 +1,6 @@
 use crate::{
     errors::Error,
-    payments::types::{Account, CallParams as PaymentsCallParams, CallType},
+    payments::types::{Account, Transaction as PaymentsTransaction, CallType},
     traits::{Leaf, ZkVMStateMachine},
     types::{ShaHasher, StateUpdate},
 };
@@ -10,7 +10,7 @@ use sparse_merkle_tree::traits::Value;
 pub struct PaymentsStateMachine {}
 
 impl ZkVMStateMachine<Account> for PaymentsStateMachine {
-    type CallParams = PaymentsCallParams;
+    type Transaction = PaymentsTransaction;
 
     fn new() -> Self {
         PaymentsStateMachine {}
@@ -18,7 +18,7 @@ impl ZkVMStateMachine<Account> for PaymentsStateMachine {
 
     fn call(
         &self,
-        params: PaymentsCallParams,
+        params: PaymentsTransaction,
         state_update: StateUpdate<Account>,
     ) -> Result<(), Error> {
         match state_update.pre_state_with_proof.1.verify::<ShaHasher>(
@@ -68,7 +68,7 @@ impl ZkVMStateMachine<Account> for PaymentsStateMachine {
 impl PaymentsStateMachine {
     fn transfer(
         &self,
-        params: PaymentsCallParams,
+        params: PaymentsTransaction,
         pre_state: Vec<Account>,
     ) -> Result<Vec<Account>, Error> {
         let mut from_account = pre_state[0].clone();
@@ -84,7 +84,7 @@ impl PaymentsStateMachine {
         Ok(vec![from_account, to_account])
     }
 
-    fn mint(&self, params: PaymentsCallParams, account: Account) -> Result<Vec<Account>, Error> {
+    fn mint(&self, params: PaymentsTransaction, account: Account) -> Result<Vec<Account>, Error> {
         let mut to_account = account;
 
         to_account.balance += params.amount;

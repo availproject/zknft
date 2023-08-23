@@ -1,51 +1,47 @@
-use bincode::{deserialize, serialize};
 use rocksdb::{Options, DB};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::{from_slice, to_vec};
 use sparse_merkle_tree::error::Error;
 use sparse_merkle_tree::traits::{StoreReadOps, StoreWriteOps};
 use sparse_merkle_tree::BranchKey;
 use sparse_merkle_tree::BranchNode;
 use sparse_merkle_tree::H256;
 
-//Store to be used inside StateMachine.
-pub struct NativeStore {
+//Store to be used inside StateMachine to store Merkle Tree.
+pub struct MerkleStore {
     db: DB,
 }
 
-impl NativeStore {
+impl MerkleStore {
     pub fn from_path(path: String) -> Self {
         let mut db_options = Options::default();
         db_options.create_if_missing(true);
 
         let db = DB::open(&db_options, path).unwrap();
 
-        NativeStore { db }
+        MerkleStore { db }
     }
 
     pub fn with_db(db: DB) -> Self {
-        NativeStore { db }
+        MerkleStore { db }
     }
 
     pub fn db_asref(&self) -> &DB {
         &self.db
     }
 
-    pub fn get<V: for<'a> Deserialize<'a>>(
-        &self,
-        serialized_key: &[u8],
-    ) -> Result<Option<V>, Error> {
-        match self.db.get(serialized_key) {
+    pub fn get<V: DeserializeOwned>(&self, serialized_key: &[u8]) -> Result<Option<V>, Error> {
+        let value = match self.db.get(serialized_key) {
             Err(e) => Err(Error::Store(e.to_string())),
             Ok(None) => Ok(None),
-            Ok(Some(i)) => Ok(deserialize(&i).unwrap()),
-        }
+            Ok(Some(i)) => Ok(from_slice::<Option<V>>(&i).unwrap()),
+        };
+
+        value
     }
 
     pub fn put<V: Serialize>(&self, serialized_key: &[u8], value: &V) -> Result<(), Error> {
-        match self
-            .db
-            .put(serialized_key, bincode::serialize(&value).unwrap())
-        {
+        match self.db.put(serialized_key, to_vec(&value).unwrap()) {
             Err(e) => Err(Error::Store(e.to_string())),
             _ => Ok(()),
         }
@@ -63,9 +59,9 @@ impl NativeStore {
     }
 }
 
-impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for NativeStore {
+impl<V: DeserializeOwned> StoreReadOps<V> for MerkleStore {
     fn get_branch(&self, branch_key: &BranchKey) -> Result<Option<BranchNode>, Error> {
-        let serialized_key = match serialize(&branch_key) {
+        let serialized_key = match to_vec(branch_key) {
             Err(e) => return Err(Error::Store(e.to_string())),
             Ok(i) => i,
         };
@@ -80,9 +76,9 @@ impl<V: for<'a> Deserialize<'a>> StoreReadOps<V> for NativeStore {
     }
 }
 
-impl<V: Serialize> StoreWriteOps<V> for NativeStore {
+impl<V: Serialize> StoreWriteOps<V> for MerkleStore {
     fn insert_branch(&mut self, node_key: BranchKey, branch: BranchNode) -> Result<(), Error> {
-        let serialized_key = match serialize(&node_key) {
+        let serialized_key = match to_vec(&node_key) {
             Err(e) => return Err(Error::Store(e.to_string())),
             Ok(i) => i,
         };
@@ -95,7 +91,7 @@ impl<V: Serialize> StoreWriteOps<V> for NativeStore {
     }
 
     fn remove_branch(&mut self, node_key: &BranchKey) -> Result<(), Error> {
-        let serialized_key = match serialize(&node_key) {
+        let serialized_key = match to_vec(&node_key) {
             Err(e) => return Err(Error::Store(e.to_string())),
             Ok(i) => i,
         };

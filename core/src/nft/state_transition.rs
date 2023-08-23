@@ -1,6 +1,6 @@
 use crate::{
     errors::Error,
-    nft::types::{CallType, Nft, NftCallParams},
+    nft::types::{CallType, Nft, NftTransaction},
     traits::StateTransition,
 };
 use sparse_merkle_tree::traits::Value;
@@ -12,7 +12,7 @@ impl NftStateTransition {
         NftStateTransition {}
     }
 
-    fn transfer(&self, params: NftCallParams, pre_state: Nft) -> Result<Vec<Nft>, Error> {
+    fn transfer(&self, params: NftTransaction, pre_state: Nft) -> Result<Vec<Nft>, Error> {
         if pre_state.owner != params.from {
             panic!("Not owner");
         }
@@ -23,7 +23,7 @@ impl NftStateTransition {
         }])
     }
 
-    fn mint(&self, params: NftCallParams, pre_state: Nft) -> Result<Vec<Nft>, Error> {
+    fn mint(&self, params: NftTransaction, pre_state: Nft) -> Result<Vec<Nft>, Error> {
         if !pre_state.owner.is_empty() {
             panic!("Already minted");
         }
@@ -38,7 +38,7 @@ impl NftStateTransition {
         }])
     }
 
-    fn burn(&self, params: NftCallParams, pre_state: Nft) -> Result<Vec<Nft>, Error> {
+    fn burn(&self, params: NftTransaction, pre_state: Nft) -> Result<Vec<Nft>, Error> {
         if pre_state.owner.is_empty() {
             panic!("Nft does not exist");
         }
@@ -51,10 +51,8 @@ impl NftStateTransition {
     }
 }
 
-impl StateTransition<Nft> for NftStateTransition {
-    type CallParams = NftCallParams;
-
-    fn execute(&self, pre_state: Vec<Nft>, params: NftCallParams) -> Result<Vec<Nft>, Error> {
+impl StateTransition<Nft, NftTransaction> for NftStateTransition {
+    fn execute(&self, pre_state: Vec<Nft>, params: NftTransaction) -> Result<Vec<Nft>, Error> {
         match params.call_type {
             CallType::Transfer => self.transfer(params, pre_state[0].clone()),
             CallType::Mint => self.mint(params, pre_state[0].clone()),

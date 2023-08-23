@@ -1,27 +1,27 @@
 use crate::{
     errors::Error,
-    nft::types::CallType,
-    state::VmState,
     traits::{Leaf, StateTransition},
     types::{ShaHasher, StateUpdate},
 };
 use sparse_merkle_tree::{traits::Value, H256};
 use std::marker::PhantomData;
 
-pub struct ZKStateMachine<V, S: StateTransition<V>> {
+pub struct ZKStateMachine<V, T, S: StateTransition<V, T>> {
     stf: S,
     phantom_v: PhantomData<V>,
+    phantom_t: PhantomData<T>,
 }
 
-impl<V: Leaf<H256> + Value + Clone, S: StateTransition<V>> ZKStateMachine<V, S> {
-    fn new(stf: S) -> Self {
+impl<V: Leaf<H256> + Value + Clone, T, S: StateTransition<V, T>> ZKStateMachine<V, T, S> {
+    pub fn new(stf: S) -> Self {
         ZKStateMachine {
             stf,
             phantom_v: PhantomData,
+            phantom_t: PhantomData,
         }
     }
 
-    fn call(&self, params: S::CallParams, state_update: StateUpdate<V>) -> Result<(), Error> {
+    pub fn call(&self, params: T, state_update: StateUpdate<V>) -> Result<(), Error> {
         match state_update.pre_state_with_proof.1.verify::<ShaHasher>(
             &state_update.pre_state_root,
             state_update

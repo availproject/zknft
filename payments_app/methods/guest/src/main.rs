@@ -2,7 +2,7 @@
 use nft_core::{     
     payments::{
         zkvm_state_machine::PaymentsStateMachine, 
-        types::{Account, Address, CallType, CallParams}
+        types::{Account, Address, CallType, Transaction}
     },
     types::{StateUpdate}, 
     traits::ZkVMStateMachine 
@@ -12,7 +12,7 @@ use risc0_zkvm::guest::env;
 risc0_zkvm::guest::entry!(main);
 
 pub fn main() {
-    let payments_call_params: CallParams = env::read();
+    let payments_call_params: Transaction = env::read();
     let state_update: StateUpdate<Account> = env::read();
 
     let state_machine = PaymentsStateMachine::new();

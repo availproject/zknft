@@ -2,7 +2,7 @@ use payments_methods::{TRANSFER_ELF, TRANSFER_ID};
 use nft_core::{
     payments::{
         state_machine::PaymentsStateMachine, 
-        types::{Account, Address, CallType, CallParams}
+        types::{Account, Address, CallType, Transaction}
     },
     traits::StateMachine,
 };
@@ -29,7 +29,7 @@ fn main() {
     U256::from_dec_str("1").unwrap().to_big_endian(&mut address_in_bytes);
     U256::from_dec_str("2").unwrap().to_big_endian(&mut address2_in_bytes);
 
-    let call_params = CallParams {
+    let call_params = Transaction {
         from: Address(address_in_bytes),
         to: Address(address2_in_bytes), 
         amount: 100,
