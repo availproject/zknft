@@ -1,7 +1,7 @@
 use nft_core::{
     nft::{
         state_machine::NftStateMachine,
-        types::{CallType, Nft, NftTransaction, NftId},
+        types::{Nft, NftTransaction, NftId},
     },
     traits::StateMachine,
     app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server}

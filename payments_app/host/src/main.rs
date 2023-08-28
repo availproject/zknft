@@ -2,7 +2,7 @@ use payments_methods::{TRANSFER_ELF, TRANSFER_ID};
 use nft_core::{
     payments::{
         state_machine::PaymentsStateMachine, 
-        types::{Account, Address, CallType, Transaction, TransactionReceipt}
+        types::{Account, Address, CallType, Transaction}
     },
     traits::StateMachine,
     app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server}
@@ -22,7 +22,7 @@ use std::time::SystemTime;
 
 #[tokio::main]
 async fn main() {
-    let mut app = AppNode::<Account, Transaction, TransactionReceipt, PaymentsStateMachine>::new(
+    let mut app = AppNode::<Account, Transaction, PaymentsStateMachine>::new(
         AppNodeRuntimeConfig {
             prover_mode: true
         }, 
