@@ -5,6 +5,7 @@ use crate::traits::StateMachine;
 use crate::traits::TxHasher;
 use crate::types::Batch;
 use crate::types::BatchHeader;
+use crate::types::TransactionWithReceipt;
 use presence::service::DaProvider as AvailDaProvider;
 use primitive_types::U256;
 use risc0_zkp::core::digest::Digest;
@@ -26,6 +27,7 @@ use actix_web::error;
 use actix_web::rt::System;
 use actix_web::HttpResponse;
 use actix_web::{get, web, App, HttpServer, Responder};
+use reqwest;
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
@@ -44,10 +46,11 @@ pub struct AppNode<V, T: Clone + DeserializeOwned + Serialize, S: StateMachine<V
 }
 
 impl<
-    V: Serialize + DeserializeOwned, 
-    T: Clone + DeserializeOwned + Serialize + TxHasher, 
-    S: StateMachine<V, T>
-> AppNode<V, T, S> {
+        V: Serialize + DeserializeOwned,
+        T: Clone + DeserializeOwned + Serialize + TxHasher,
+        S: StateMachine<V, T>,
+    > AppNode<V, T, S>
+{
     pub fn new(config: AppNodeRuntimeConfig, zkvm_elf: &[u8], zkvm_id: impl Into<Digest>) -> Self {
         let node_db = NodeDB::from_path(String::from("./node_db"));
         let last_state_root: H256 = match node_db.get::<BatchHeader>(b"last_batch_header") {
@@ -69,7 +72,6 @@ impl<
     }
 
     pub async fn run(&mut self) -> Result<(), Error> {
-
         Ok(())
     }
 
@@ -107,7 +109,7 @@ impl<
         Ok(())
     }
 
-    pub fn execute_batch(&mut self, call_params: T) -> Result<(), Error> {
+    pub async fn execute_batch(&mut self, call_params: T) -> Result<(), Error> {
         let now = SystemTime::now();
         let last_batch_number: u64 = match &self.db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.batch_number,
@@ -115,7 +117,9 @@ impl<
             Err(e) => panic!("Could not start node. {:?}", e),
         };
 
-        let state_update = self.state_machine.call(call_params.clone()).unwrap();
+        //TODO: Below should be replaced with a loop to execute a list of transactions.
+        let (state_update, receipt) = self.state_machine.execute_tx(call_params.clone()).unwrap();
+
         println!(
             "Pre state: {:?}, Post state: {:?}",
             &state_update.pre_state_root, &state_update.post_state_root
@@ -123,6 +127,7 @@ impl<
         let env = ExecutorEnv::builder()
             .add_input(&to_vec(&call_params).unwrap())
             .add_input(&to_vec(&state_update).unwrap())
+            .add_input(&to_vec(&(last_batch_number + 1)).unwrap())
             .build()
             .unwrap();
 
@@ -138,24 +143,36 @@ impl<
 
         println!("Executed, cycles: {}k", cycles / 1024);
         // Prove the session to produce a receipt.
-        let receipt = session.prove().unwrap();
+        let session_receipt = session.prove().unwrap();
 
-        receipt.verify(self.zkvm_id).unwrap();
+        println!("{:?}", &self.zkvm_id);
+        session_receipt.verify(self.zkvm_id).unwrap();
 
         //Add batch header.
-        match &self.db.put(b"last_batch_header", &BatchHeader {
-            pre_state_root: state_update.pre_state_root.clone(), 
-            state_root: state_update.post_state_root.clone(), 
-            transactions_root: call_params.to_h256(), 
-            batch_number: last_batch_number + 1,
-            receipt,
-        }) {
+        match &self.db.put(
+            b"last_batch_header",
+            &BatchHeader {
+                pre_state_root: state_update.pre_state_root.clone(),
+                state_root: state_update.post_state_root.clone(),
+                //TODO: Change both below to hash list of transactions and
+                //not single one.
+                transactions_root: call_params.to_h256(),
+                receipts_root: receipt.to_h256(),
+                batch_number: last_batch_number + 1,
+            },
+        ) {
             Ok(()) => (),
             Err(e) => return Err(e.clone()),
         };
 
-        //Add tx list. For now only one transaction.
-        match &self.db.put(call_params.to_h256().as_slice(), &call_params) {
+        //TODO: Add tx list. For now only one transaction.
+        match &self.db.put(
+            call_params.to_h256().as_slice(),
+            &TransactionWithReceipt {
+                transaction: call_params.clone(),
+                receipt: receipt,
+            },
+        ) {
             Ok(()) => (),
             Err(e) => return Err(e.clone()),
         }
@@ -164,9 +181,10 @@ impl<
             Ok(elapsed) => {
                 // it prints '2'
                 println!(
-                    "execution done, time elapsed: {}s, tx count: {}",
+                    "execution done, time elapsed: {}s, tx count: {}, tx hash: {:?}",
                     elapsed.as_secs(),
-                    last_batch_number + 1
+                    last_batch_number + 1,
+                    call_params.to_h256()
                 );
             }
             Err(e) => {
@@ -175,12 +193,24 @@ impl<
             }
         }
 
-        Ok(())
-    }
+        // NEED TO  REWRITE BELOW.
+        let client = reqwest::Client::new();
+        let url = "http://localhost:8000/"; // Change this to your server's URL
 
-    pub async fn handle_request_without_param(&self) -> Result<String, Error> {
-        // Implement method 1 logic
-        Ok(format!("I waited {} seconds!", 123))
+        let serialized = serde_json::to_string(&session_receipt).unwrap();
+        println!("{:?}", &serialized.len());
+
+        let response = client
+            .post(url)
+            .body(serialized)
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .unwrap();
+
+        println!("Response status: {:?}", response);
+
+        Ok(())
     }
 }
 
@@ -196,7 +226,7 @@ where
     let mut app = service.lock().unwrap();
     println!("Received request.");
 
-    app.execute_batch(call.clone());
+    app.execute_batch(call.clone()).await;
 
     "Transaction Executed"
 }

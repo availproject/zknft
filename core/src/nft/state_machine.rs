@@ -2,10 +2,10 @@ use crate::traits::StateTransition;
 use crate::{
     errors::Error,
     nft::state_transition::NftStateTransition,
-    nft::types::{CallType, Nft, NftTransaction, NftId},
+    nft::types::{Nft, NftId, NftTransaction},
     state::VmState,
     traits::StateMachine,
-    types::StateUpdate,
+    types::{StateUpdate, TransactionReceipt},
 };
 use primitive_types::U256;
 use sparse_merkle_tree::traits::Value;
@@ -26,10 +26,14 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
             let nft1 = Nft {
                 id: NftId(U256::from_dec_str("1").unwrap()),
                 owner: String::from("ABCD"),
+                nonce: 1,
+                future: None,
             };
             let nft2 = Nft {
                 id: NftId(U256::from_dec_str("2").unwrap()),
                 owner: String::from("EFGH"),
+                nonce: 1,
+                future: None,
             };
 
             state
@@ -43,19 +47,31 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         }
     }
 
-    fn call(&mut self, params: NftTransaction) -> Result<StateUpdate<Nft>, Error> {
-        let nft_key = params.id.get_key();
+    fn execute_tx(
+        &mut self,
+        params: NftTransaction,
+    ) -> Result<(StateUpdate<Nft>, TransactionReceipt), Error> {
+        let nft_key = match params {
+            NftTransaction::Transfer(ref i) => i.id.get_key(),
+            NftTransaction::Mint(ref i) => i.id.get_key(),
+            NftTransaction::Burn(ref i) => i.id.get_key(),
+            NftTransaction::Trigger(ref i) => i.id.get_key(),
+        };
+
         let nft = match self.state.get(&nft_key) {
             Ok(Some(i)) => i,
             Err(e) => return Err(e),
             Ok(None) => return Err(Error::Unknown),
         };
 
-        let updated_set = match self.stf.execute(vec![nft], params) {
+        let result = match self.stf.execute_tx(vec![nft], params) {
             Ok(i) => i,
             Err(e) => return Err(e),
         };
 
-        self.state.update_set(updated_set)
+        match self.state.update_set(result.0) {
+            Ok(i) => Ok((i, result.1)),
+            Err(e) => Err(e),
+        }
     }
 }

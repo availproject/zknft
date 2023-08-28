@@ -22,8 +22,9 @@ sov-rollup-interface = { path = "../rollup-interface", optional = true}
 hyper = { version = "0.14.23", optional = true, features = ["server"]}
 tokio = { version = "1", features = ["full"], optional = true }
 actix-web = { version = "4.3.1", optional = true }
+reqwest = { version = "0.11.20", optional = true }
 
 [features]
 default = ["zkvm"]
-native = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/default", "risc0-zkp", "presence/native", "sov-rollup-interface", "hyper", "tokio", "actix-web"]
+native = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/default", "risc0-zkp", "presence/native", "sov-rollup-interface", "hyper", "tokio", "actix-web", "reqwest"]
 zkvm = ["sparse-merkle-tree/arch-32", "sparse-merkle-tree/std", "primitive-types", "primitive-types/serde", "risc0-zkvm/std"]

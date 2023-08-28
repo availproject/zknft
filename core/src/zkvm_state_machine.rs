@@ -1,7 +1,7 @@
 use crate::{
     errors::Error,
-    traits::{Leaf, StateTransition},
-    types::{ShaHasher, StateUpdate},
+    traits::{Leaf, StateTransition, TxHasher},
+    types::{BatchHeader, ShaHasher, StateUpdate, TransactionReceipt},
 };
 use sparse_merkle_tree::{traits::Value, H256};
 use std::marker::PhantomData;
@@ -12,7 +12,12 @@ pub struct ZKStateMachine<V, T, S: StateTransition<V, T>> {
     phantom_t: PhantomData<T>,
 }
 
-impl<V: Leaf<H256> + Value + Clone, T, S: StateTransition<V, T>> ZKStateMachine<V, T, S> {
+impl<
+        V: Leaf<H256> + Value + Clone,
+        T: TxHasher + Clone,
+        S: StateTransition<V, T>,
+    > ZKStateMachine<V, T, S>
+{
     pub fn new(stf: S) -> Self {
         ZKStateMachine {
             stf,
@@ -21,7 +26,12 @@ impl<V: Leaf<H256> + Value + Clone, T, S: StateTransition<V, T>> ZKStateMachine<
         }
     }
 
-    pub fn call(&self, params: T, state_update: StateUpdate<V>) -> Result<(), Error> {
+    pub fn execute_tx(
+        &self,
+        params: T,
+        state_update: StateUpdate<V>,
+        batch_number: u64,
+    ) -> Result<BatchHeader, Error> {
         match state_update.pre_state_with_proof.1.verify::<ShaHasher>(
             &state_update.pre_state_root,
             state_update
@@ -37,11 +47,11 @@ impl<V: Leaf<H256> + Value + Clone, T, S: StateTransition<V, T>> ZKStateMachine<
             Err(_i) => return Err(Error::Unknown),
         };
 
-        let call_result: Result<Vec<V>, Error> = self
+        let call_result: Result<(Vec<V>, TransactionReceipt), Error> = self
             .stf
-            .execute(state_update.pre_state_with_proof.0.clone(), params);
+            .execute_tx(state_update.pre_state_with_proof.0.clone(), params.clone());
 
-        let updated_set: Vec<V> = match call_result {
+        let (updated_set, receipt): (Vec<V>, TransactionReceipt) = match call_result {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
@@ -59,6 +69,13 @@ impl<V: Leaf<H256> + Value + Clone, T, S: StateTransition<V, T>> ZKStateMachine<
             Err(_i) => return Err(Error::Unknown),
         };
 
-        Ok(())
+        Ok(BatchHeader {
+            pre_state_root: state_update.post_state_root,
+            state_root: state_update.pre_state_root,
+            transactions_root: params.to_h256(),
+            receipts_root: receipt.to_h256(),
+            //Note: Batch can be removed from public parameters.
+            batch_number,
+        })
     }
 }

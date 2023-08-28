@@ -30,7 +30,7 @@ async fn main() {
         TRANSFER_ID
     );
 
-    
+    println!("{:?}", TRANSFER_ID);
     start_rpc_server(app).await;
     ()
 }

@@ -1,7 +1,7 @@
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
 #[cfg(feature = "native")]
 use risc0_zkvm::SessionReceipt;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sparse_merkle_tree::{traits::Hasher, MerkleProof, H256};
 
 #[derive(Default)]
@@ -42,19 +42,43 @@ pub struct StateUpdate<S> {
     pub post_state_with_proof: (Vec<S>, MerkleProof),
 }
 
-#[cfg(feature = "native")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatchHeader {
     pub pre_state_root: H256,
-    pub state_root: H256, 
+    pub state_root: H256,
     pub transactions_root: H256,
-    pub batch_number: u64, 
-    pub receipt: SessionReceipt
+    //Note: Receipts root is not required for security guarantees, but helps
+    //nexus verify receipts list and update its tree.
+    pub receipts_root: H256,
+    pub batch_number: u64,
 }
 
 #[cfg(feature = "native")]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Batch<T> {
     pub header: BatchHeader,
-    pub transactions: Vec<T>
+    pub transactions: Vec<T>,
+}
+
+#[cfg(feature = "native")]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TransactionWithReceipt<T> {
+    pub transaction: T,
+    pub receipt: TransactionReceipt,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TransactionReceipt {
+    pub chain_id: u64,
+    pub data: Vec<u8>,
+}
+
+impl TransactionReceipt {
+    pub fn to_h256(&self) -> H256 {
+        let mut hasher = ShaHasher::new();
+        let serialized = bincode::serialize(&self).unwrap();
+        hasher.0.update(&serialized);
+
+        hasher.finish()
+    }
 }

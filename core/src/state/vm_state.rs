@@ -37,12 +37,6 @@ pub struct VmState<V> {
     tree: SparseMerkleTree<ShaHasher, V, MerkleStore>,
 }
 
-// impl<V: Value + std::default::Default + Clone + Leaf<H256> + PartialEq> Default for VmState<V> {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
-
 impl<
         V: Value
             + std::default::Default
@@ -55,12 +49,7 @@ impl<
 {
     pub fn new(root: H256) -> Self {
         VmState {
-            tree: SparseMerkleTree::new(
-                root,
-                MerkleStore::from_path(String::from(
-                "./app_node",
-                ))
-            ),
+            tree: SparseMerkleTree::new(root, MerkleStore::from_path(String::from("./app_node"))),
         }
     }
 

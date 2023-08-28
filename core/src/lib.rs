@@ -9,6 +9,7 @@ pub mod nft;
 pub mod app_node;
 #[cfg(feature = "native")]
 pub mod db;
+pub mod payments;
 #[cfg(feature = "native")]
 pub mod state;
 pub mod traits;

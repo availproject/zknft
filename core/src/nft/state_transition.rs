@@ -1,7 +1,11 @@
 use crate::{
     errors::Error,
-    nft::types::{CallType, Nft, NftTransaction},
+    nft::types::{
+        Burn, Future, FutureReceiptData, Mint, Nft, NftTransaction, Transfer, TransferReceiptData,
+        Trigger,
+    },
     traits::StateTransition,
+    types::TransactionReceipt,
 };
 use sparse_merkle_tree::traits::Value;
 
@@ -12,33 +16,115 @@ impl NftStateTransition {
         NftStateTransition {}
     }
 
-    fn transfer(&self, params: NftTransaction, pre_state: Nft) -> Result<Vec<Nft>, Error> {
+    fn transfer(
+        &self,
+        params: Transfer,
+        pre_state: Nft,
+    ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state.owner != params.from {
             panic!("Not owner");
         }
 
-        Ok(vec![Nft {
-            id: params.id,
-            owner: params.owner.unwrap(),
-        }])
+        let updated_nonce = pre_state.nonce + 1;
+
+        match params.future_commitment {
+            None => Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: params.to.clone(),
+                    nonce: updated_nonce,
+                    future: None,
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (TransferReceiptData {
+                        id: params.id,
+                        from: params.from,
+                        to: params.to,
+                        data: params.data,
+                        nonce: updated_nonce,
+                    })
+                    .to_vec(),
+                },
+            )),
+            Some(i) => Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: pre_state.owner.clone(),
+                    future: Some(Future {
+                        to: params.to.clone(),
+                        commitment: i,
+                    }),
+                    nonce: updated_nonce,
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (FutureReceiptData {
+                        id: params.id,
+                        from: params.from,
+                        to: params.to,
+                        data: params.data,
+                        nonce: updated_nonce,
+                        future_commitment: i,
+                    })
+                    .to_vec(),
+                },
+            )),
+        }
     }
 
-    fn mint(&self, params: NftTransaction, pre_state: Nft) -> Result<Vec<Nft>, Error> {
-        if !pre_state.owner.is_empty() {
+    fn mint(&self, params: Mint, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
+        if !pre_state.owner.is_empty() || pre_state.nonce != 0 {
             panic!("Already minted");
         }
 
-        //TODO: Add runtime check to see if owner is passed.
-        Ok(vec![Nft {
-            id: params.id,
-            owner: match params.owner {
-                Some(i) => i,
-                None => String::from("Default Owner"),
-            },
-        }])
+        match params.future_commitment {
+            None => Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: params.to.clone(),
+                    nonce: 1,
+                    future: None,
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (TransferReceiptData {
+                        id: params.id,
+                        from: String::from(""),
+                        to: params.to,
+                        data: params.data,
+                        nonce: 1,
+                    })
+                    .to_vec(),
+                },
+            )),
+            Some(i) => Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: String::from(""),
+                    nonce: 1,
+                    future: Some(Future {
+                        to: params.to.clone(),
+                        commitment: i,
+                    }),
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (FutureReceiptData {
+                        id: params.id,
+                        from: String::from(""),
+                        to: params.to,
+                        data: params.data,
+                        nonce: 1,
+                        future_commitment: i,
+                    })
+                    .to_vec(),
+                },
+            )),
+        }
     }
 
-    fn burn(&self, params: NftTransaction, pre_state: Nft) -> Result<Vec<Nft>, Error> {
+    fn burn(&self, params: Burn, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state.owner.is_empty() {
             panic!("Nft does not exist");
         }
@@ -47,16 +133,99 @@ impl NftStateTransition {
             panic!("Not owner")
         }
 
-        Ok(vec![Nft::zero()])
+        let updated_nonce = pre_state.nonce + 1;
+
+        match params.future_commitment {
+            None => Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: String::from(""),
+                    nonce: updated_nonce,
+                    future: None,
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (TransferReceiptData {
+                        id: params.id,
+                        from: params.from,
+                        to: String::from(""),
+                        data: params.data,
+                        nonce: updated_nonce,
+                    })
+                    .to_vec(),
+                },
+            )),
+            Some(i) => Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: pre_state.owner.clone(),
+                    future: Some(Future {
+                        to: String::from(""),
+                        commitment: i,
+                    }),
+                    nonce: updated_nonce,
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (FutureReceiptData {
+                        id: params.id,
+                        from: params.from,
+                        to: String::from(""),
+                        data: params.data,
+                        nonce: updated_nonce,
+                        future_commitment: i,
+                    })
+                    .to_vec(),
+                },
+            )),
+        }
+    }
+
+    fn trigger(
+        &self,
+        params: Trigger,
+        pre_state: Nft,
+    ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
+        let future = match pre_state.future {
+            None => panic!("No future registered."),
+            Some(i) => i,
+        };
+
+        let updated_nonce = pre_state.nonce + 1;
+
+        Ok((
+            vec![Nft {
+                id: params.id.clone(),
+                owner: future.to.clone(),
+                future: None,
+                nonce: updated_nonce,
+            }],
+            TransactionReceipt {
+                chain_id: 101,
+                data: (TransferReceiptData {
+                    id: params.id,
+                    from: pre_state.owner,
+                    to: future.to,
+                    data: params.data,
+                    nonce: updated_nonce,
+                })
+                .to_vec(),
+            },
+        ))
     }
 }
 
 impl StateTransition<Nft, NftTransaction> for NftStateTransition {
-    fn execute(&self, pre_state: Vec<Nft>, params: NftTransaction) -> Result<Vec<Nft>, Error> {
-        match params.call_type {
-            CallType::Transfer => self.transfer(params, pre_state[0].clone()),
-            CallType::Mint => self.mint(params, pre_state[0].clone()),
-            CallType::Burn => self.burn(params, pre_state[0].clone()),
+    fn execute_tx(
+        &self,
+        pre_state: Vec<Nft>,
+        params: NftTransaction,
+    ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
+        match params {
+            NftTransaction::Transfer(i) => self.transfer(i, pre_state[0].clone()),
+            NftTransaction::Mint(i) => self.mint(i, pre_state[0].clone()),
+            NftTransaction::Burn(i) => self.burn(i, pre_state[0].clone()),
+            NftTransaction::Trigger(i) => self.trigger(i, pre_state[0].clone()),
         }
     }
 }

@@ -11,12 +11,13 @@ risc0_zkvm::guest::entry!(main);
 pub fn main() {
     let nft_call_params: NftTransaction = env::read();
     let state_update: StateUpdate<Nft> = env::read();
-
+    let batch_number: u64 = env::read();
     let state_machine = ZKStateMachine::new(NftStateTransition::new());
 
-    match state_machine.call(nft_call_params, state_update.clone()) {
-        Ok(()) => (), 
+    let journal = match state_machine.execute_tx(nft_call_params, state_update.clone(), batch_number) {
+        Ok(i) => i, 
         Err(_) => panic!("State transition failed.")
-    }
-    env::commit(&state_update.post_state_root);
+    };
+
+    env::commit(&journal);
 }

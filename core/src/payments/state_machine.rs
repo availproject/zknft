@@ -1,107 +1,94 @@
 use crate::{
     errors::Error,
-    payments::types::{Account, Address, Transaction as PaymentsTransaction, CallType},
+    payments::state_transition::PaymentsStateTransition,
+    payments::types::{
+        Account, Address, CallType, PaymentReceiptData, Transaction as PaymentsTransaction,
+    },
     state::VmState,
-    traits::StateMachine,
-    types::StateUpdate,
+    traits::{StateMachine, StateTransition},
+    types::{StateUpdate, TransactionReceipt},
 };
 use primitive_types::U256;
+use sparse_merkle_tree::H256;
 
 pub struct PaymentsStateMachine {
     pub state: VmState<Account>,
+    stf: PaymentsStateTransition,
 }
 
-impl StateMachine<Account> for PaymentsStateMachine {
-    type Transaction = PaymentsTransaction;
+impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
+    fn new(root: H256) -> Self {
+        let mut state = VmState::new(root);
 
-    fn new() -> Self {
-        let mut address_in_bytes = [0u8; 32];
-        let mut address2_in_bytes = [0u8; 32];
+        //TODO: Can remove get root here.
+        if state.get_root() == H256::zero() {
+            let mut address_in_bytes = [0u8; 32];
+            let mut address2_in_bytes = [0u8; 32];
 
-        U256::from_dec_str("1")
-            .unwrap()
-            .to_big_endian(&mut address_in_bytes);
-        U256::from_dec_str("2")
-            .unwrap()
-            .to_big_endian(&mut address2_in_bytes);
+            U256::from_dec_str("1")
+                .unwrap()
+                .to_big_endian(&mut address_in_bytes);
+            U256::from_dec_str("2")
+                .unwrap()
+                .to_big_endian(&mut address2_in_bytes);
 
-        let account1 = Account {
-            address: Address(address_in_bytes),
-            balance: 1000,
-        };
-        let account2 = Account {
-            address: Address(address2_in_bytes),
-            balance: 1000,
-        };
+            let account1 = Account {
+                address: Address(address_in_bytes.into()),
+                balance: 1000,
+                nonce: 0,
+            };
+            let account2 = Account {
+                address: Address(address2_in_bytes.into()),
+                balance: 1000,
+                nonce: 0,
+            };
 
-        let mut state = VmState::new(None);
+            state
+                .update_set(vec![account1, account2])
+                .expect("Init state failed.");
+        }
 
-        state
-            .update_set(vec![account1, account2])
-            .expect("Init state failed.");
-
-        PaymentsStateMachine { state }
-    }
-
-    fn call(&mut self, params: PaymentsTransaction) -> Result<StateUpdate<Account>, Error> {
-        match params.call_type {
-            CallType::Transfer => self.transfer(params),
-            CallType::Mint => self.mint(params),
+        PaymentsStateMachine {
+            state,
+            stf: PaymentsStateTransition::new(),
         }
     }
 
-    fn load() -> Self {
-        unimplemented!()
-    }
-}
-
-impl PaymentsStateMachine {
-    fn transfer(&mut self, params: PaymentsTransaction) -> Result<StateUpdate<Account>, Error> {
+    fn execute_tx(
+        &mut self,
+        params: PaymentsTransaction,
+    ) -> Result<(StateUpdate<Account>, TransactionReceipt), Error> {
         let from_address_key = params.from.get_key();
         let to_address_key = params.to.get_key();
 
-        let mut from_account: Account = match self.state.get(&from_address_key) {
+        let from_account: Account = match self.state.get(&from_address_key) {
             Ok(Some(i)) => i,
             Err(_e) => panic!("Error in finding account details"),
-            Ok(None) => panic!("Account has no balance"),
+            Ok(None) => Account {
+                address: params.from.clone(),
+                balance: 0,
+                nonce: 0,
+            },
         };
 
-        if from_account.balance < params.amount {
-            panic!("Not enough balance");
+        let to_account = match self.state.get(&to_address_key) {
+            Ok(Some(i)) => i,
+            Err(_e) => panic!("Error in finding account details"),
+            Ok(None) => Account {
+                address: params.to.clone(),
+                balance: 0,
+                nonce: 0,
+            },
+        };
+
+        let result = match self.stf.execute_tx(vec![from_account, to_account], params) {
+            Ok(i) => i,
+            Err(e) => return Err(e),
+        };
+
+        match self.state.update_set(result.0) {
+            Ok(i) => Ok((i, result.1)),
+            Err(e) => Err(e),
         }
-
-        from_account.balance -= params.amount;
-
-        let mut to_account = match self.state.get(&to_address_key) {
-            Ok(Some(i)) => i,
-            Err(_e) => panic!("Error in finding account details"),
-            Ok(None) => Account {
-                address: params.to,
-                balance: 0,
-            },
-        };
-
-        to_account.balance += params.amount;
-
-        self.state.update_set(vec![from_account, to_account])
-    }
-
-    fn mint(&mut self, params: PaymentsTransaction) -> Result<StateUpdate<Account>, Error> {
-        let to_address_key = params.to.get_key();
-
-        //TODO: Some check to ensure admin is minting.
-
-        let mut to_account = match self.state.get(&to_address_key) {
-            Ok(Some(i)) => i,
-            Err(_e) => panic!("Error in finding account details"),
-            Ok(None) => Account {
-                address: params.to,
-                balance: 0,
-            },
-        };
-
-        to_account.balance += params.amount;
-
-        self.state.update_set(vec![to_account])
     }
 }
