@@ -16,7 +16,10 @@ pub fn main() {
 
     let journal = match state_machine.execute_tx(nft_call_params, state_update.clone(), batch_number) {
         Ok(i) => i, 
-        Err(_) => panic!("State transition failed.")
+        Err(e) => {
+            println!("{:?}", e);
+            panic!("State transition failed.")
+        }
     };
 
     env::commit(&journal);

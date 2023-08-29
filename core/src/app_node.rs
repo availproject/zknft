@@ -6,6 +6,7 @@ use crate::traits::TxHasher;
 use crate::types::Batch;
 use crate::types::BatchHeader;
 use crate::types::TransactionWithReceipt;
+use crate::types::TransactionReceipt;
 use presence::service::DaProvider as AvailDaProvider;
 use primitive_types::U256;
 use risc0_zkp::core::digest::Digest;
@@ -13,6 +14,7 @@ use risc0_zkvm::{
     default_executor_from_elf,
     serde::{from_slice, to_vec},
     ExecutorEnv,
+    SessionReceipt
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
@@ -170,7 +172,7 @@ impl<
             call_params.to_h256().as_slice(),
             &TransactionWithReceipt {
                 transaction: call_params.clone(),
-                receipt: receipt,
+                receipt: receipt.clone(),
             },
         ) {
             Ok(()) => (),
@@ -195,9 +197,13 @@ impl<
 
         // NEED TO  REWRITE BELOW.
         let client = reqwest::Client::new();
-        let url = "http://localhost:8000/"; // Change this to your server's URL
+        let url = "http://localhost:8000/submit-batch"; // Change this to your server's URL
 
-        let serialized = serde_json::to_string(&session_receipt).unwrap();
+        let serialized = serde_json::to_string(&SubmitProofParam {
+            session_receipt,
+            receipts: vec![receipt],
+            chain: AppChain::Payments,
+        }).unwrap();
         println!("{:?}", &serialized.len());
 
         let response = client
@@ -248,4 +254,17 @@ where
     .unwrap()
     .run()
     .await;
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum AppChain {
+  Nft, 
+  Payments,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SubmitProofParam {
+  session_receipt: SessionReceipt, 
+  receipts: Vec<TransactionReceipt>, 
+  chain: AppChain
 }

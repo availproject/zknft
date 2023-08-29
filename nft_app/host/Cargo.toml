@@ -8,7 +8,6 @@ risc0-zkvm = { version = "0.16.1" }
 serde = "1.0"
 nft_core = { path = "../../core", features = ["native"] }
 primitive-types = "0.12.1"
-sha2 = "0.10.7"
 nft-methods = { path = "../methods" }
 sparse-merkle-tree = { path = "../../../sparse-merkle-tree" }
 tokio = "1.30.0"

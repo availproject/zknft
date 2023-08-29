@@ -13,7 +13,7 @@ pub struct ZKStateMachine<V, T, S: StateTransition<V, T>> {
 }
 
 impl<
-        V: Leaf<H256> + Value + Clone,
+        V: Leaf<H256> + Value + Clone + std::fmt::Debug,
         T: TxHasher + Clone,
         S: StateTransition<V, T>,
     > ZKStateMachine<V, T, S>
@@ -43,9 +43,16 @@ impl<
         ) {
             Ok(true) => (),
             //TODO - Change to invalid proof error
-            Ok(false) => return Err(Error::Unknown),
-            Err(_i) => return Err(Error::Unknown),
+            Ok(false) => {
+                println!("Merkle verification failed.");
+                return Err(Error::Unknown)
+            },
+            Err(e) => {
+                println!("{:?}", e);
+                return Err(Error::Unknown)
+            },
         };
+        println!("pre state checked.");
 
         let call_result: Result<(Vec<V>, TransactionReceipt), Error> = self
             .stf
@@ -55,8 +62,9 @@ impl<
             Ok(v) => v,
             Err(e) => return Err(e),
         };
+        println!("executed.");
 
-        match state_update.post_state_with_proof.1.verify::<ShaHasher>(
+        match state_update.post_state_with_proof.clone().1.verify::<ShaHasher>(
             &state_update.post_state_root,
             updated_set
                 .iter()
@@ -65,8 +73,14 @@ impl<
         ) {
             Ok(true) => (),
             //TODO - Change to invalid proof error
-            Ok(false) => return Err(Error::Unknown),
-            Err(_i) => return Err(Error::Unknown),
+            Ok(false) => {
+                println!("Merkle verification failed., {:?}, ", &state_update.post_state_with_proof);
+                return Err(Error::Unknown)
+            },
+            Err(e) => {
+                println!("{:?}", e);
+                return Err(Error::Unknown)
+            },
         };
 
         Ok(BatchHeader {

@@ -2,7 +2,8 @@ use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
 #[cfg(feature = "native")]
 use risc0_zkvm::SessionReceipt;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sparse_merkle_tree::{traits::Hasher, MerkleProof, H256};
+use sparse_merkle_tree::{traits::{Hasher, Value}, MerkleProof, H256};
+use crate::traits::Leaf;
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -42,7 +43,7 @@ pub struct StateUpdate<S> {
     pub post_state_with_proof: (Vec<S>, MerkleProof),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BatchHeader {
     pub pre_state_root: H256,
     pub state_root: H256,
@@ -51,6 +52,18 @@ pub struct BatchHeader {
     //nexus verify receipts list and update its tree.
     pub receipts_root: H256,
     pub batch_number: u64,
+}
+
+impl BatchHeader {
+    pub fn default() -> Self {
+        Self {
+            pre_state_root: H256::zero(), 
+            state_root: H256::zero(), 
+            transactions_root: H256::zero(), 
+            receipts_root: H256::zero(), 
+            batch_number: 0
+        }
+    }
 }
 
 #[cfg(feature = "native")]
@@ -67,7 +80,7 @@ pub struct TransactionWithReceipt<T> {
     pub receipt: TransactionReceipt,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
 pub struct TransactionReceipt {
     pub chain_id: u64,
     pub data: Vec<u8>,
@@ -82,3 +95,29 @@ impl TransactionReceipt {
         hasher.finish()
     }
 }
+
+impl Value for TransactionReceipt {
+    fn to_h256(&self) -> H256 {
+        if self.chain_id == 0 {
+            return H256::zero();
+        }
+  
+        let mut hasher = ShaHasher::new();
+        let serialized = bincode::serialize(&self).unwrap();
+        hasher.0.update(&serialized);
+  
+        hasher.finish()
+    }
+  
+    fn zero() -> Self {
+        Default::default()
+    }
+}
+
+impl Leaf<H256> for TransactionReceipt {
+    fn get_key(&self) -> H256 {
+        self.to_h256()
+    }
+}
+
+  

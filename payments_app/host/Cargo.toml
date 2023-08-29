@@ -4,12 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-risc0-zkvm = { version = "0.16.1", features = ["metal"] }
+risc0-zkvm = { version = "0.16.1" }
 serde = "1.0"
 nft_core = { path = "../../core", features = ["native"] }
-serde_json = "1.0.103"
 primitive-types = "0.12.1"
-sha2 = "0.10.7"
 payments-methods = { path = "../methods" }
 sparse-merkle-tree = { path = "../../../sparse-merkle-tree" }
 tokio = "1.30.0"

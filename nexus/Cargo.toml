@@ -6,16 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sparse-merkle-tree = { path = "../../sparse-merkle-tree", optional = true, default-features = false }
+sparse-merkle-tree = { path = "../../sparse-merkle-tree" }
 nft_core = { path = "../core", features = ["native"] }
 actix-web = "4.3.1"
 tokio = "1.30.0"
 nft-methods = { path = "../nft_app/methods" }
+payments-methods = { path = "../payments_app/methods" }
 risc0-zkvm = {version = "0.16.1"}
-bincode = "1.3.3"
 serde = "1.0"
-rs_merkle = "1.4.1"
-jmt = "0.6.0"
-sov-db = { git = "https://github.com/Sovereign-Labs/sovereign-sdk" }
 primitive-types = "0.12.1"
-sha2 = "0.10.7"
