@@ -5,7 +5,7 @@ use nft_core::{
         types::{Account, Address, CallType, Transaction}
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server}
+    app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server, AppChain}
 };
 use primitive_types::U256;
 use risc0_zkvm::{
@@ -27,7 +27,8 @@ async fn main() {
             prover_mode: true
         }, 
         TRANSFER_ELF, 
-        TRANSFER_ID
+        TRANSFER_ID, 
+        AppChain::Payments
     );
 
     println!("{:?}", TRANSFER_ID);

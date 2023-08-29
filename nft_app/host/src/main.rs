@@ -4,7 +4,7 @@ use nft_core::{
         types::{Nft, NftTransaction, NftId},
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server}
+    app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server, AppChain}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use primitive_types::U256;
@@ -27,7 +27,8 @@ async fn main() {
             prover_mode: true
         }, 
         TRANSFER_ELF, 
-        TRANSFER_ID
+        TRANSFER_ID, 
+        AppChain::Nft
     );
 
     println!("{:?}", TRANSFER_ID);

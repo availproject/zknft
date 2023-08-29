@@ -76,6 +76,7 @@ impl<
             //TODO - Change to invalid proof error
             Ok(false) => {
                 println!("Merkle verification failed., {:?}, ", &state_update.post_state_with_proof);
+                println!("Merkle verification failed., {:?}, ", &state_update.post_state_root);
                 return Err(Error::Unknown)
             },
             Err(e) => {

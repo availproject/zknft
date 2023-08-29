@@ -34,7 +34,7 @@ impl Address {
 
 impl Value for Account {
     fn to_h256(&self) -> H256 {
-        if self.balance == 0 {
+        if self.balance == 0 && self.nonce == 0 {
             return H256::zero();
         }
 

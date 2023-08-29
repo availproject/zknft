@@ -42,6 +42,7 @@ pub struct AppNode<V, T: Clone + DeserializeOwned + Serialize, S: StateMachine<V
     state_machine: S,
     db: NodeDB,
     runtime_config: AppNodeRuntimeConfig,
+    chain: AppChain,
     zkvm_elf: Box<[u8]>,
     zkvm_id: Digest,
     phantom_v: PhantomData<V>,
@@ -54,7 +55,7 @@ impl<
         S: StateMachine<V, T>,
     > AppNode<V, T, S>
 {
-    pub fn new(config: AppNodeRuntimeConfig, zkvm_elf: &[u8], zkvm_id: impl Into<Digest>) -> Self {
+    pub fn new(config: AppNodeRuntimeConfig, zkvm_elf: &[u8], zkvm_id: impl Into<Digest>, chain: AppChain) -> Self {
         let node_db = NodeDB::from_path(String::from("./node_db"));
         let last_state_root: H256 = match node_db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.state_root.clone(),
@@ -67,6 +68,7 @@ impl<
             state_machine,
             db: node_db,
             runtime_config: config,
+            chain,
             zkvm_elf: zkvm_elf.into(),
             zkvm_id: zkvm_id.into(),
             phantom_v: PhantomData,
@@ -207,7 +209,7 @@ impl<
         let serialized = serde_json::to_string(&SubmitProofParam {
             session_receipt,
             receipts: vec![receipt],
-            chain: AppChain::Nft,
+            chain: self.chain.clone(),
         }).unwrap();
         println!("{:?}", &serialized.len());
 
@@ -261,7 +263,7 @@ where
     .await;
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum AppChain {
   Nft, 
   Payments,
