@@ -7,6 +7,7 @@ use crate::types::Batch;
 use crate::types::BatchHeader;
 use crate::types::TransactionWithReceipt;
 use crate::types::TransactionReceipt;
+use crate::types::AggregatedBatch;
 use presence::service::DaProvider as AvailDaProvider;
 use primitive_types::U256;
 use risc0_zkp::core::digest::Digest;
@@ -112,15 +113,18 @@ impl<
     }
 
     pub async fn execute_batch(&mut self, call_params: T) -> Result<(), Error> {
+        let nexus_url = "http://127.0.0.1:8000/current-batch";
         let now = SystemTime::now();
         let last_batch_number: u64 = match &self.db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.batch_number,
             Ok(None) => 0,
             Err(e) => panic!("Could not start node. {:?}", e),
         };
+        //TODO: Add proper error handling below by removing unwrap.
+        let aggregated_proof: AggregatedBatch = reqwest::get(nexus_url).await.unwrap().json().await.unwrap();
 
         //TODO: Below should be replaced with a loop to execute a list of transactions.
-        let (state_update, receipt) = self.state_machine.execute_tx(call_params.clone()).unwrap();
+        let (state_update, receipt) = self.state_machine.execute_tx(call_params.clone(), aggregated_proof.clone()).unwrap();
 
         println!(
             "Pre state: {:?}, Post state: {:?}",
@@ -130,6 +134,7 @@ impl<
             .add_input(&to_vec(&call_params).unwrap())
             .add_input(&to_vec(&state_update).unwrap())
             .add_input(&to_vec(&(last_batch_number + 1)).unwrap())
+            .add_input(&to_vec(&aggregated_proof).unwrap())
             .build()
             .unwrap();
 
@@ -202,7 +207,7 @@ impl<
         let serialized = serde_json::to_string(&SubmitProofParam {
             session_receipt,
             receipts: vec![receipt],
-            chain: AppChain::Payments,
+            chain: AppChain::Nft,
         }).unwrap();
         println!("{:?}", &serialized.len());
 

@@ -5,7 +5,7 @@ use crate::{
     nft::types::{Nft, NftId, NftTransaction},
     state::VmState,
     traits::StateMachine,
-    types::{StateUpdate, TransactionReceipt},
+    types::{StateUpdate, TransactionReceipt, AggregatedBatch},
 };
 use primitive_types::U256;
 use sparse_merkle_tree::traits::Value;
@@ -50,6 +50,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
     fn execute_tx(
         &mut self,
         params: NftTransaction,
+        aggregated_proof: AggregatedBatch
     ) -> Result<(StateUpdate<Nft>, TransactionReceipt), Error> {
         let nft_id = match params {
             NftTransaction::Transfer(ref i) => i.id.clone(),
@@ -72,7 +73,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
             },
         };
 
-        let result = match self.stf.execute_tx(vec![nft], params) {
+        let result = match self.stf.execute_tx(vec![nft], params, aggregated_proof) {
             Ok(i) => i,
             Err(e) => return Err(e),
         };

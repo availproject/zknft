@@ -5,7 +5,7 @@ use crate::{
         Account, Address, CallType, PaymentReceiptData, Transaction as PaymentsTransaction,
     },
     traits::StateMachine,
-    types::{StateUpdate, TransactionReceipt},
+    types::{StateUpdate, TransactionReceipt, AggregatedBatch},
 };
 use sparse_merkle_tree::H256;
 
@@ -90,6 +90,7 @@ impl StateTransition<Account, PaymentsTransaction> for PaymentsStateTransition {
         &self,
         pre_state: Vec<Account>,
         params: PaymentsTransaction,
+        aggregated_proof: AggregatedBatch
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
         match params.call_type {
             CallType::Transfer => self.transfer(params, pre_state.clone()),

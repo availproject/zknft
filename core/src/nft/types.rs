@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::{
     traits::{Hasher, Value},
     H256,
+    merkle_proof::MerkleProof
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
@@ -102,6 +103,7 @@ pub struct Trigger {
     pub id: NftId,
     pub from: String,
     pub data: Option<String>,
+    pub merkle_proof: MerkleProof,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

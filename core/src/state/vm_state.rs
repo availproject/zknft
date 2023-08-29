@@ -55,7 +55,7 @@ impl<
 
     pub fn update_set(&mut self, set: Vec<V>) -> Result<StateUpdate<V>, Error> {
         let pre_state_root = self.get_root();
-
+        println!("Update set called.");
         let pre_merkle_proof = self
             .tree
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())

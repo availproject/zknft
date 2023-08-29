@@ -6,7 +6,7 @@ use crate::{
     },
     state::VmState,
     traits::{StateMachine, StateTransition},
-    types::{StateUpdate, TransactionReceipt},
+    types::{StateUpdate, TransactionReceipt, AggregatedBatch},
 };
 use primitive_types::U256;
 use sparse_merkle_tree::H256;
@@ -57,6 +57,7 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
     fn execute_tx(
         &mut self,
         params: PaymentsTransaction,
+        aggregated_proof: AggregatedBatch
     ) -> Result<(StateUpdate<Account>, TransactionReceipt), Error> {
         let from_address_key = params.from.get_key();
         let to_address_key = params.to.get_key();
@@ -81,7 +82,7 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
             },
         };
 
-        let result = match self.stf.execute_tx(vec![from_account, to_account], params) {
+        let result = match self.stf.execute_tx(vec![from_account, to_account], params, aggregated_proof) {
             Ok(i) => i,
             Err(e) => return Err(e),
         };

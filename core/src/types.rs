@@ -120,4 +120,10 @@ impl Leaf<H256> for TransactionReceipt {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
+pub struct AggregatedBatch {
+    pub proof_number: u64,
+    pub receipts_root: H256,
+}
+
   

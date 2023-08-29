@@ -46,22 +46,23 @@ async fn main() {
         last_aggregated_payments_batch
     )));
 
-    let app = NexusApp::new(
+    let mut app = NexusApp::new(
         shared_tree, 
         shared_app_state, 
         shared_db
     );
-    let shared_service = Arc::new(Mutex::new(app.clone()));
-    let shared_service_clone = shared_service.clone();
+    let app_clone = app.clone();
+    // let shared_service = Arc::new(Mutex::new(app.clone()));
+    // let shared_service_clone = shared_service.clone();
     // Spawn a new thread for the RPC server
     let rpc_thread = thread::spawn(move || {
         tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(start_rpc_server(shared_service_clone));
+            .block_on(start_rpc_server(app_clone));
     });
 
     // Start the main loop in the current thread
-    //let app_lock = shared_service.lock().unwrap();
+    //let mut app_lock = shared_service.lock().unwrap();
     app.start().await;
 
     // Wait for the RPC server thread to finish
