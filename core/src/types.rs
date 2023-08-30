@@ -89,19 +89,20 @@ pub struct TransactionReceipt {
     pub data: Vec<u8>,
 }
 
-impl TransactionReceipt {
-    pub fn to_h256(&self) -> H256 {
-        let mut hasher = ShaHasher::new();
-        let serialized = bincode::serialize(&self).unwrap();
-        hasher.0.update(&serialized);
+// impl TransactionReceipt {
+//     pub fn to_h256(&self) -> H256 {
+//         let mut hasher = ShaHasher::new();
+//         let serialized = bincode::serialize(&self).unwrap();
+//         hasher.0.update(&serialized);
 
-        hasher.finish()
-    }
-}
+//         hasher.finish()
+//     }
+// }
 
 impl Value for TransactionReceipt {
     fn to_h256(&self) -> H256 {
-        if self.chain_id == 0 {
+        if self.chain_id == 0 &&
+        self.data == vec![0] {
             return H256::zero();
         }
 

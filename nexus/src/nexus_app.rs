@@ -8,6 +8,8 @@ use std::thread;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::H256;
+use nft_core::traits::Leaf;
+use sparse_merkle_tree::traits::Value;
 
 //Below imports for HTTP server.
 use actix_web::error;
@@ -328,6 +330,22 @@ async fn submit_batch(
     }
 }
 
+async fn get_receipt_with_proof(
+  service: web::Data<NexusApp>,
+  call: web::Json<TransactionReceipt>,
+) -> impl Responder {
+  let deserialized_call: TransactionReceipt = call.into_inner();
+  let tree_state = service.tree_state.lock().unwrap();
+
+  let receipt_with_proof = match tree_state.get_with_proof(&deserialized_call.get_key()) {
+    Ok(i) => i,
+    Err(e) => return HttpResponse::InternalServerError().body("Internal error.")
+  };
+  println!("Received request.");
+  
+  HttpResponse::Ok().json(receipt_with_proof)
+}
+
 async fn get_current_batch(
   service: web::Data<NexusApp>,
 ) -> impl Responder {
@@ -348,6 +366,7 @@ pub async fn start_rpc_server(shared_service: NexusApp) -> impl Send {
             .app_data(web::Data::new(shared_service.clone()))
             .route("/submit-batch", web::post().to(submit_batch))
             .route("/current-batch", web::get().to(get_current_batch))
+            .route("/receipt", web::get().to(get_receipt_with_proof))
     })
     .bind(("127.0.0.1", 8000))
     .unwrap()

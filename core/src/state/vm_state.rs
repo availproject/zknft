@@ -10,7 +10,9 @@ use sparse_merkle_tree::{
     default_store::DefaultStore,
     traits::Hasher,
     traits::{StoreReadOps, StoreWriteOps, Value},
-    SparseMerkleTree, H256,
+    SparseMerkleTree, 
+    H256,
+    MerkleProof
 };
 use std::cmp::PartialEq;
 
@@ -78,29 +80,6 @@ impl<
             .unwrap();
         println!("Post merkle state: {:?}", &set);
 
-        // let result = match post_merkle_proof.clone().verify::<ShaHasher>(
-        //     &post_state_root,
-        //     set
-        //         .iter()
-        //         .map(|x| (x.get_key(), x.to_h256()))
-        //         .collect(),
-        // ) {
-        //     Ok(true) => {
-        //     println!("Verification worked in vm state.");
-
-        //         ()
-        //     },
-        //     //TODO - Change to invalid proof error
-        //     Ok(false) => {
-        //         println!("Failed in cm state too");
-        //         return Err(Error::Unknown)
-        //     },
-        //     Err(e) => {
-        //         println!("{:?}", e);
-        //         return Err(Error::Unknown)
-        //     },
-        // };
-
         Ok(StateUpdate {
             pre_state_root,
             post_state_root,
@@ -120,6 +99,20 @@ impl<
             }
             Err(_e) => Err(Error::StateError(StateError::ErroneousState)),
         }
+    }
+
+    pub fn get_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error> {
+        let value = match self.tree.get(key) {
+            Ok(i) => i,
+            Err(_e) => return Err(Error::StateError(StateError::ErroneousState)),
+        };
+
+        let proof = match self.tree.merkle_proof(vec![key.clone()]) {
+            Ok(i) => i, 
+            Err(_e) => return Err(Error::StateError(StateError::ErroneousState))
+        };
+
+        Ok((value, proof))
     }
 
     pub fn get_root(&self) -> H256 {

@@ -8,6 +8,7 @@ use crate::{
     types::{AggregatedBatch, ShaHasher, TransactionReceipt},
 };
 use sparse_merkle_tree::traits::Value;
+use sparse_merkle_tree::H256;
 
 pub struct NftStateTransition;
 
@@ -200,14 +201,42 @@ impl NftStateTransition {
             Some(i) => i,
         };
 
-        let updated_nonce = pre_state.nonce + 1;
-
-        //TODO: Non inclusion.
         match params.merkle_proof.verify::<ShaHasher>(
             &aggregated_proof.receipts_root,
-            vec![(future.commitment.clone(), future.commitment)],
+            //Checks both inclusion or non inclusion.
+            vec![(future.commitment.clone(), params.receipt.to_h256())],
         ) {
-            Ok(true) => Ok((
+            Ok(true) => (),
+            Ok(false) => panic!("Invalid merkle proof."),
+            Err(e) => panic!("Error while verifying merkle"),
+        }
+
+        let updated_nonce = pre_state.nonce + 1;
+
+        //Check if the given proof was non inclusion.
+        if params.receipt.to_h256() == H256::zero() {
+            //Revert transaction if the receipt is not included.
+            Ok((
+                vec![Nft {
+                    id: params.id.clone(),
+                    owner: pre_state.owner.clone(),
+                    future: None,
+                    nonce: updated_nonce,
+                }],
+                TransactionReceipt {
+                    chain_id: 101,
+                    data: (TransferReceiptData {
+                        id: params.id,
+                        from: pre_state.owner.clone(),
+                        to: pre_state.owner,
+                        data: params.data,
+                        nonce: updated_nonce,
+                    })
+                    .to_vec(),
+                },
+            ))
+        } else {
+            Ok((
                 vec![Nft {
                     id: params.id.clone(),
                     owner: future.to.clone(),
@@ -225,9 +254,7 @@ impl NftStateTransition {
                     })
                     .to_vec(),
                 },
-            )),
-            Ok(false) => panic!("Invalid merkle proof."),
-            Err(e) => panic!("Error while verifying merkle"),
+            ))
         }
     }
 }

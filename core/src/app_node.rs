@@ -21,6 +21,7 @@ use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::DaService;
 use sparse_merkle_tree::H256;
+use sparse_merkle_tree::traits::Value;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 

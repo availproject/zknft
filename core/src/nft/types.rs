@@ -1,6 +1,6 @@
 use crate::{
     traits::{Leaf, TxHasher},
-    types::ShaHasher,
+    types::{ShaHasher, TransactionReceipt},
 };
 use primitive_types::U256;
 use risc0_zkvm::sha::rust_crypto::Digest;
@@ -104,6 +104,7 @@ pub struct Trigger {
     pub from: String,
     pub data: Option<String>,
     pub merkle_proof: MerkleProof,
+    pub receipt: TransactionReceipt,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
