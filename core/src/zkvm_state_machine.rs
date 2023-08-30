@@ -1,7 +1,7 @@
 use crate::{
     errors::Error,
     traits::{Leaf, StateTransition, TxHasher},
-    types::{BatchHeader, ShaHasher, StateUpdate, TransactionReceipt, AggregatedBatch},
+    types::{AggregatedBatch, BatchHeader, ShaHasher, StateUpdate, TransactionReceipt},
 };
 use sparse_merkle_tree::{traits::Value, H256};
 use std::marker::PhantomData;
@@ -31,7 +31,7 @@ impl<
         params: T,
         state_update: StateUpdate<V>,
         batch_number: u64,
-        aggregated_proof: AggregatedBatch
+        aggregated_proof: AggregatedBatch,
     ) -> Result<BatchHeader, Error> {
         match state_update.pre_state_with_proof.1.verify::<ShaHasher>(
             &state_update.pre_state_root,
@@ -46,18 +46,20 @@ impl<
             //TODO - Change to invalid proof error
             Ok(false) => {
                 println!("Merkle verification failed.");
-                return Err(Error::Unknown)
-            },
+                return Err(Error::Unknown);
+            }
             Err(e) => {
                 println!("{:?}", e);
-                return Err(Error::Unknown)
-            },
+                return Err(Error::Unknown);
+            }
         };
         println!("pre state checked.");
 
-        let call_result: Result<(Vec<V>, TransactionReceipt), Error> = self
-            .stf
-            .execute_tx(state_update.pre_state_with_proof.0.clone(), params.clone(), aggregated_proof);
+        let call_result: Result<(Vec<V>, TransactionReceipt), Error> = self.stf.execute_tx(
+            state_update.pre_state_with_proof.0.clone(),
+            params.clone(),
+            aggregated_proof,
+        );
 
         let (updated_set, receipt): (Vec<V>, TransactionReceipt) = match call_result {
             Ok(v) => v,
@@ -65,24 +67,36 @@ impl<
         };
         println!("executed.");
 
-        match state_update.post_state_with_proof.clone().1.verify::<ShaHasher>(
-            &state_update.post_state_root,
-            updated_set
-                .iter()
-                .map(|x| (x.get_key(), x.to_h256()))
-                .collect(),
-        ) {
+        println!("zkvm post merkle set: {:?}", &updated_set);
+
+        match state_update
+            .post_state_with_proof
+            .clone()
+            .1
+            .verify::<ShaHasher>(
+                &state_update.post_state_root,
+                updated_set
+                    .iter()
+                    .map(|x| (x.get_key(), x.to_h256()))
+                    .collect(),
+            ) {
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => {
-                println!("Merkle verification failed., {:?}, ", &state_update.post_state_with_proof);
-                println!("Merkle verification failed., {:?}, ", &state_update.post_state_root);
-                return Err(Error::Unknown)
-            },
+                println!(
+                    "Merkle verification failed., {:?}, ",
+                    &state_update.post_state_with_proof
+                );
+                println!(
+                    "Merkle verification failed., {:?}, ",
+                    &state_update.post_state_root
+                );
+                return Err(Error::Unknown);
+            }
             Err(e) => {
                 println!("{:?}", e);
-                return Err(Error::Unknown)
-            },
+                return Err(Error::Unknown);
+            }
         };
 
         Ok(BatchHeader {

@@ -1,6 +1,6 @@
 use crate::{
     errors::Error,
-    types::{StateUpdate, TransactionReceipt, AggregatedBatch},
+    types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sparse_merkle_tree::H256;
@@ -11,7 +11,11 @@ pub trait Leaf<K> {
 
 pub trait StateMachine<V, T: Clone + DeserializeOwned + Serialize> {
     fn new(root: H256) -> Self;
-    fn execute_tx(&mut self, call: T,aggregated_proof: AggregatedBatch) -> Result<(StateUpdate<V>, TransactionReceipt), Error>;
+    fn execute_tx(
+        &mut self,
+        call: T,
+        aggregated_proof: AggregatedBatch,
+    ) -> Result<(StateUpdate<V>, TransactionReceipt), Error>;
 }
 
 pub trait StateTransition<V, T> {

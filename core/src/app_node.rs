@@ -3,19 +3,18 @@ use crate::errors::Error;
 use crate::state::VmState;
 use crate::traits::StateMachine;
 use crate::traits::TxHasher;
+use crate::types::AggregatedBatch;
 use crate::types::Batch;
 use crate::types::BatchHeader;
-use crate::types::TransactionWithReceipt;
 use crate::types::TransactionReceipt;
-use crate::types::AggregatedBatch;
+use crate::types::TransactionWithReceipt;
 use presence::service::DaProvider as AvailDaProvider;
 use primitive_types::U256;
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
     default_executor_from_elf,
     serde::{from_slice, to_vec},
-    ExecutorEnv,
-    SessionReceipt
+    ExecutorEnv, SessionReceipt,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
@@ -55,7 +54,12 @@ impl<
         S: StateMachine<V, T>,
     > AppNode<V, T, S>
 {
-    pub fn new(config: AppNodeRuntimeConfig, zkvm_elf: &[u8], zkvm_id: impl Into<Digest>, chain: AppChain) -> Self {
+    pub fn new(
+        config: AppNodeRuntimeConfig,
+        zkvm_elf: &[u8],
+        zkvm_id: impl Into<Digest>,
+        chain: AppChain,
+    ) -> Self {
         let node_db = NodeDB::from_path(String::from("./node_db"));
         let last_state_root: H256 = match node_db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.state_root.clone(),
@@ -123,15 +127,19 @@ impl<
             Err(e) => panic!("Could not start node. {:?}", e),
         };
         //TODO: Add proper error handling below by removing unwrap.
-        let aggregated_proof: AggregatedBatch = reqwest::get(nexus_url).await.unwrap().json().await.unwrap();
+        let aggregated_proof: AggregatedBatch =
+            reqwest::get(nexus_url).await.unwrap().json().await.unwrap();
 
         //TODO: Below should be replaced with a loop to execute a list of transactions.
-        let (state_update, receipt) = self.state_machine.execute_tx(call_params.clone(), aggregated_proof.clone()).unwrap();
+        let (state_update, receipt) = self
+            .state_machine
+            .execute_tx(call_params.clone(), aggregated_proof.clone())
+            .unwrap();
 
-        println!(
-            "Pre state: {:?}, Post state: {:?}",
-            &state_update.pre_state_root, &state_update.post_state_root
-        );
+        // println!(
+        //     "Pre state: {:?}, Post state: {:?}",
+        //     &state_update.pre_state_root, &state_update.post_state_root
+        // );
         let env = ExecutorEnv::builder()
             .add_input(&to_vec(&call_params).unwrap())
             .add_input(&to_vec(&state_update).unwrap())
@@ -210,7 +218,8 @@ impl<
             session_receipt,
             receipts: vec![receipt],
             chain: self.chain.clone(),
-        }).unwrap();
+        })
+        .unwrap();
         println!("{:?}", &serialized.len());
 
         let response = client
@@ -265,13 +274,13 @@ where
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum AppChain {
-  Nft, 
-  Payments,
+    Nft,
+    Payments,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SubmitProofParam {
-  session_receipt: SessionReceipt, 
-  receipts: Vec<TransactionReceipt>, 
-  chain: AppChain
+    session_receipt: SessionReceipt,
+    receipts: Vec<TransactionReceipt>,
+    chain: AppChain,
 }

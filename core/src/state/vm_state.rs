@@ -44,7 +44,8 @@ impl<
             + Leaf<H256>
             + PartialEq
             + DeserializeOwned
-            + Serialize,
+            + Serialize
+            + std::fmt::Debug,
     > VmState<V>
 {
     pub fn new(root: H256) -> Self {
@@ -75,6 +76,30 @@ impl<
             .tree
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
+        println!("Post merkle state: {:?}", &set);
+
+        // let result = match post_merkle_proof.clone().verify::<ShaHasher>(
+        //     &post_state_root,
+        //     set
+        //         .iter()
+        //         .map(|x| (x.get_key(), x.to_h256()))
+        //         .collect(),
+        // ) {
+        //     Ok(true) => {
+        //     println!("Verification worked in vm state.");
+
+        //         ()
+        //     },
+        //     //TODO - Change to invalid proof error
+        //     Ok(false) => {
+        //         println!("Failed in cm state too");
+        //         return Err(Error::Unknown)
+        //     },
+        //     Err(e) => {
+        //         println!("{:?}", e);
+        //         return Err(Error::Unknown)
+        //     },
+        // };
 
         Ok(StateUpdate {
             pre_state_root,

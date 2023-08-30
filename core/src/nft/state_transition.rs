@@ -5,7 +5,7 @@ use crate::{
         Trigger,
     },
     traits::StateTransition,
-    types::{TransactionReceipt, AggregatedBatch, ShaHasher},
+    types::{AggregatedBatch, ShaHasher, TransactionReceipt},
 };
 use sparse_merkle_tree::traits::Value;
 
@@ -21,6 +21,10 @@ impl NftStateTransition {
         params: Transfer,
         pre_state: Nft,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
+        if pre_state == Nft::zero() {
+            panic!("NFT not minted.");
+        }
+
         if pre_state.owner != params.from {
             panic!("Not owner");
         }
@@ -74,7 +78,7 @@ impl NftStateTransition {
     }
 
     fn mint(&self, params: Mint, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
-        if !pre_state.owner.is_empty() || pre_state.nonce != 0 {
+        if pre_state != Nft::zero() {
             panic!("Already minted");
         }
 
@@ -125,7 +129,7 @@ impl NftStateTransition {
     }
 
     fn burn(&self, params: Burn, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
-        if pre_state.owner.is_empty() {
+        if pre_state == Nft::zero() {
             panic!("Nft does not exist");
         }
 
@@ -187,6 +191,10 @@ impl NftStateTransition {
         pre_state: Nft,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
+        if pre_state == Nft::zero() {
+            panic!("Nft does not exist.");
+        }
+
         let future = match pre_state.future {
             None => panic!("No future registered."),
             Some(i) => i,
@@ -197,7 +205,7 @@ impl NftStateTransition {
         //TODO: Non inclusion.
         match params.merkle_proof.verify::<ShaHasher>(
             &aggregated_proof.receipts_root,
-            vec![(future.commitment.clone(), future.commitment)]
+            vec![(future.commitment.clone(), future.commitment)],
         ) {
             Ok(true) => Ok((
                 vec![Nft {
@@ -217,9 +225,9 @@ impl NftStateTransition {
                     })
                     .to_vec(),
                 },
-            )), 
-            Ok(false) => panic!("Invalid merkle proof."), 
-            Err(e) => panic!("Error while verifying merkle")
+            )),
+            Ok(false) => panic!("Invalid merkle proof."),
+            Err(e) => panic!("Error while verifying merkle"),
         }
     }
 }
@@ -229,7 +237,7 @@ impl StateTransition<Nft, NftTransaction> for NftStateTransition {
         &self,
         pre_state: Vec<Nft>,
         params: NftTransaction,
-        aggregated_proof: AggregatedBatch
+        aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         match params {
             NftTransaction::Transfer(i) => self.transfer(i, pre_state[0].clone()),

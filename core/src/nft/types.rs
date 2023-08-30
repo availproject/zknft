@@ -6,9 +6,9 @@ use primitive_types::U256;
 use risc0_zkvm::sha::rust_crypto::Digest;
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::{
+    merkle_proof::MerkleProof,
     traits::{Hasher, Value},
     H256,
-    merkle_proof::MerkleProof
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]

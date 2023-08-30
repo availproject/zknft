@@ -1,9 +1,12 @@
+use crate::traits::Leaf;
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
 #[cfg(feature = "native")]
 use risc0_zkvm::SessionReceipt;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sparse_merkle_tree::{traits::{Hasher, Value}, MerkleProof, H256};
-use crate::traits::Leaf;
+use sparse_merkle_tree::{
+    traits::{Hasher, Value},
+    MerkleProof, H256,
+};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -57,11 +60,11 @@ pub struct BatchHeader {
 impl BatchHeader {
     pub fn default() -> Self {
         Self {
-            pre_state_root: H256::zero(), 
-            state_root: H256::zero(), 
-            transactions_root: H256::zero(), 
-            receipts_root: H256::zero(), 
-            batch_number: 0
+            pre_state_root: H256::zero(),
+            state_root: H256::zero(),
+            transactions_root: H256::zero(),
+            receipts_root: H256::zero(),
+            batch_number: 0,
         }
     }
 }
@@ -101,14 +104,14 @@ impl Value for TransactionReceipt {
         if self.chain_id == 0 {
             return H256::zero();
         }
-  
+
         let mut hasher = ShaHasher::new();
         let serialized = bincode::serialize(&self).unwrap();
         hasher.0.update(&serialized);
-  
+
         hasher.finish()
     }
-  
+
     fn zero() -> Self {
         Default::default()
     }
@@ -125,5 +128,3 @@ pub struct AggregatedBatch {
     pub proof_number: u64,
     pub receipts_root: H256,
 }
-
-  

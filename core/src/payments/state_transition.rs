@@ -5,9 +5,10 @@ use crate::{
         Account, Address, CallType, PaymentReceiptData, Transaction as PaymentsTransaction,
     },
     traits::StateMachine,
-    types::{StateUpdate, TransactionReceipt, AggregatedBatch},
+    types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
 use sparse_merkle_tree::H256;
+use sparse_merkle_tree::traits::Value;
 
 pub struct PaymentsStateTransition {
     chain_id: u64,
@@ -26,7 +27,14 @@ impl PaymentsStateTransition {
         params: PaymentsTransaction,
         pre_state: Vec<Account>,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
-        let mut from_account = pre_state[0].clone();
+        let mut from_account: Account = match pre_state[0].clone() {
+            i if i == Account::zero() => Account {
+                address: params.from.clone(),
+                nonce: 0,
+                balance: 0,
+            },
+            i => i,
+        };
 
         if from_account.balance < params.amount {
             panic!("Not enough balance");
@@ -35,8 +43,14 @@ impl PaymentsStateTransition {
         from_account.balance -= params.amount;
         from_account.nonce += 1;
 
-        let mut to_account = pre_state[1].clone();
-
+        let mut to_account: Account = match pre_state[1].clone() {
+            i if i == Account::zero() => Account {
+                address: params.to.clone(),
+                nonce: 0,
+                balance: 0,
+            },
+            i => i,
+        };
         to_account.balance += params.amount;
 
         Ok((
@@ -61,9 +75,22 @@ impl PaymentsStateTransition {
         params: PaymentsTransaction,
         pre_state: Vec<Account>,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
-        let mut from_account = pre_state[0].clone();
-        let mut to_account = pre_state[1].clone();
-
+        let mut from_account: Account = match pre_state[0].clone() {
+            i if i == Account::zero() => Account {
+                address: params.from.clone(),
+                nonce: 0,
+                balance: 0,
+            },
+            i => i,
+        };
+        let mut to_account: Account = match pre_state[1].clone() {
+            i if i == Account::zero() => Account {
+                address: params.to.clone(),
+                nonce: 0,
+                balance: 0,
+            },
+            i => i,
+        };
         from_account.nonce += 1;
         to_account.balance += params.amount;
 
@@ -90,7 +117,7 @@ impl StateTransition<Account, PaymentsTransaction> for PaymentsStateTransition {
         &self,
         pre_state: Vec<Account>,
         params: PaymentsTransaction,
-        aggregated_proof: AggregatedBatch
+        aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
         match params.call_type {
             CallType::Transfer => self.transfer(params, pre_state.clone()),

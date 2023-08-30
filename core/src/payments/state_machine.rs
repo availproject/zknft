@@ -6,10 +6,11 @@ use crate::{
     },
     state::VmState,
     traits::{StateMachine, StateTransition},
-    types::{StateUpdate, TransactionReceipt, AggregatedBatch},
+    types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
 use primitive_types::U256;
 use sparse_merkle_tree::H256;
+use sparse_merkle_tree::traits::Value;
 
 pub struct PaymentsStateMachine {
     pub state: VmState<Account>,
@@ -57,7 +58,7 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
     fn execute_tx(
         &mut self,
         params: PaymentsTransaction,
-        aggregated_proof: AggregatedBatch
+        aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<Account>, TransactionReceipt), Error> {
         let from_address_key = params.from.get_key();
         let to_address_key = params.to.get_key();
@@ -65,27 +66,23 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
         let from_account: Account = match self.state.get(&from_address_key) {
             Ok(Some(i)) => i,
             Err(_e) => panic!("Error in finding account details"),
-            Ok(None) => Account {
-                address: params.from.clone(),
-                balance: 0,
-                nonce: 0,
-            },
+            Ok(None) => Account::zero(),
         };
 
         let to_account = match self.state.get(&to_address_key) {
             Ok(Some(i)) => i,
             Err(_e) => panic!("Error in finding account details"),
-            Ok(None) => Account {
-                address: params.to.clone(),
-                balance: 0,
-                nonce: 0,
-            },
+            Ok(None) => Account::zero(),
         };
 
-        let result = match self.stf.execute_tx(vec![from_account, to_account], params, aggregated_proof) {
-            Ok(i) => i,
-            Err(e) => return Err(e),
-        };
+        let result =
+            match self
+                .stf
+                .execute_tx(vec![from_account, to_account], params, aggregated_proof)
+            {
+                Ok(i) => i,
+                Err(e) => return Err(e),
+            };
 
         match self.state.update_set(result.0) {
             Ok(i) => Ok((i, result.1)),
