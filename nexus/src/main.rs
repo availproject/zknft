@@ -56,9 +56,7 @@ async fn main() {
     // let shared_service_clone = shared_service.clone();
     // Spawn a new thread for the RPC server
     let rpc_thread = thread::spawn(move || {
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(start_rpc_server(app_clone));
+        start_rpc_server(app_clone);
     });
 
     // Start the main loop in the current thread
