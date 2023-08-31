@@ -9,8 +9,8 @@ use crate::{
     types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
 use primitive_types::U256;
-use sparse_merkle_tree::H256;
 use sparse_merkle_tree::traits::Value;
+use sparse_merkle_tree::H256;
 
 pub struct PaymentsStateMachine {
     pub state: VmState<Account>,

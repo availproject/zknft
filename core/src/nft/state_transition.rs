@@ -41,7 +41,7 @@ impl NftStateTransition {
                     future: None,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (TransferReceiptData {
                         id: params.id,
                         from: params.from,
@@ -63,7 +63,7 @@ impl NftStateTransition {
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (FutureReceiptData {
                         id: params.id,
                         from: params.from,
@@ -92,7 +92,7 @@ impl NftStateTransition {
                     future: None,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (TransferReceiptData {
                         id: params.id,
                         from: String::from(""),
@@ -114,7 +114,7 @@ impl NftStateTransition {
                     }),
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (FutureReceiptData {
                         id: params.id,
                         from: String::from(""),
@@ -149,7 +149,7 @@ impl NftStateTransition {
                     future: None,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (TransferReceiptData {
                         id: params.id,
                         from: params.from,
@@ -171,7 +171,7 @@ impl NftStateTransition {
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (FutureReceiptData {
                         id: params.id,
                         from: params.from,
@@ -224,7 +224,7 @@ impl NftStateTransition {
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (TransferReceiptData {
                         id: params.id,
                         from: pre_state.owner.clone(),
@@ -244,7 +244,7 @@ impl NftStateTransition {
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
-                    chain_id: 101,
+                    chain_id: 7000,
                     data: (TransferReceiptData {
                         id: params.id,
                         from: pre_state.owner,

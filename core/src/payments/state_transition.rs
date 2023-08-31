@@ -7,8 +7,8 @@ use crate::{
     traits::StateMachine,
     types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
-use sparse_merkle_tree::H256;
 use sparse_merkle_tree::traits::Value;
+use sparse_merkle_tree::H256;
 
 pub struct PaymentsStateTransition {
     chain_id: u64,
@@ -18,7 +18,7 @@ impl PaymentsStateTransition {
     pub fn new() -> Self {
         PaymentsStateTransition {
             //TODO: make chain ID configurable.
-            chain_id: 100,
+            chain_id: 7001,
         }
     }
 
@@ -38,6 +38,10 @@ impl PaymentsStateTransition {
 
         if from_account.balance < params.amount {
             panic!("Not enough balance");
+        }
+
+        if from_account.address == params.to {
+            panic!("Cannot transfer to self.");
         }
 
         from_account.balance -= params.amount;
@@ -83,32 +87,54 @@ impl PaymentsStateTransition {
             },
             i => i,
         };
-        let mut to_account: Account = match pre_state[1].clone() {
-            i if i == Account::zero() => Account {
-                address: params.to.clone(),
-                nonce: 0,
-                balance: 0,
-            },
-            i => i,
-        };
-        from_account.nonce += 1;
-        to_account.balance += params.amount;
 
-        Ok((
-            vec![from_account.clone(), to_account],
-            TransactionReceipt {
-                chain_id: self.chain_id,
-                data: (PaymentReceiptData {
-                    from: Address(H256::from([0u8; 32])),
-                    to: params.to,
-                    amount: params.amount,
-                    call_type: params.call_type,
-                    data: params.data,
-                    nonce: from_account.nonce,
-                })
-                .to_vec(),
-            },
-        ))
+        from_account.nonce += 1;
+
+        if params.from != params.to {
+            let mut to_account: Account = match pre_state[1].clone() {
+                i if i == Account::zero() => Account {
+                    address: params.to.clone(),
+                    nonce: 0,
+                    balance: 0,
+                },
+                i => i,
+            };
+            to_account.balance += params.amount;
+
+            Ok((
+                vec![from_account.clone(), to_account],
+                TransactionReceipt {
+                    chain_id: self.chain_id,
+                    data: (PaymentReceiptData {
+                        from: Address(H256::from([0u8; 32])),
+                        to: params.to,
+                        amount: params.amount,
+                        call_type: params.call_type,
+                        data: params.data,
+                        nonce: from_account.nonce,
+                    })
+                    .to_vec(),
+                },
+            ))
+        } else {
+            from_account.balance += params.amount;
+
+            Ok((
+                vec![from_account.clone()],
+                TransactionReceipt {
+                    chain_id: self.chain_id,
+                    data: (PaymentReceiptData {
+                        from: Address(H256::from([0u8; 32])),
+                        to: params.to,
+                        amount: params.amount,
+                        call_type: params.call_type,
+                        data: params.data,
+                        nonce: from_account.nonce,
+                    })
+                    .to_vec(),
+                },
+            ))
+        }
     }
 }
 

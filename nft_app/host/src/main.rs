@@ -32,6 +32,6 @@ async fn main() {
     );
 
     println!("{:?}", TRANSFER_ID);
-    start_rpc_server(app).await;
+    start_rpc_server(app, 7000).await;
     ()
 }

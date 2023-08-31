@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::H256;
 use nft_core::traits::Leaf;
 use sparse_merkle_tree::traits::Value;
+use hex;
 
 //Below imports for HTTP server.
 use actix_web::error;
@@ -175,7 +176,7 @@ impl NexusApp {
 
         let pending_payments_batch_count = app_state.verified_payments_batches.proof_count();
 
-        for _ in 1..pending_nft_batch_count {
+        for _ in 0..pending_payments_batch_count {
           let next_batch = match app_state.verified_payments_batches.first() {
             Some(i) => i, 
             None => continue,
@@ -217,7 +218,14 @@ impl NexusApp {
             Ok(()) => (),
             Err(e) => panic!("Could not start node. {:?}", e),
           }
-          //TODO: Save nft and payments batch details as well, to compare pre state.
+          match db.put::<AggregatedBatch>(b"last_aggregated_nft_batch", &app_state.last_aggregated_nft_batch) {
+            Ok(()) => (),
+            Err(e) => panic!("Could not start node. {:?}", e),
+          }
+          match db.put::<AggregatedBatch>(b"last_aggregated_payments_batch", &app_state.last_aggregated_payments_batch) {
+            Ok(()) => (),
+            Err(e) => panic!("Could not start node. {:?}", e),
+          }
         }
     }
 
@@ -232,7 +240,7 @@ impl NexusApp {
             )))),
         };
 
-        println!("Verified nftn batch");
+        println!("Verified NFT batch. Will be aggregated in the next cycle.");
         let batch_header: BatchHeader = from_slice(&receipt.journal).unwrap();
         let last_batch_header: BatchHeader = app_state.get_last_nft_verified_batch();
         //TODO: change this to calculate root of all receipts, currently we assume
@@ -249,7 +257,7 @@ impl NexusApp {
             }
           );
 
-          println!("Addedd nft batch, total count: {:?}", app_state.verified_nft_batches.proof_count());
+          println!("Added nft batch, total count: {:?}", app_state.verified_nft_batches.proof_count());
 
           Ok(())
         } else {
@@ -263,6 +271,7 @@ impl NexusApp {
 
     pub fn verify_payments_batch(&self, receipt: SessionReceipt, tx_receipts: Vec<TransactionReceipt>) -> Result<(), Error> {
       let mut app_state = self.app_state.lock().unwrap();
+      println!("Verifying payments batch");
 
       match receipt.verify(PAYMENTS_ID) {
           Ok(i) => Ok::<(), ProofError>(()),
@@ -288,6 +297,8 @@ impl NexusApp {
           }
         );
 
+        println!("Verified and added payments batch. Will be aggregated in the next cycle.");
+
         Ok(())
       } else {
         Err(Error::ProofError(ProofError(String::from(
@@ -310,6 +321,12 @@ pub struct SubmitProofParam {
   chain: AppChain
 }
 
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
+pub struct ReceiptQuery {
+  key: String,
+}
+
 async fn submit_batch(
     service: web::Data<NexusApp>,
     call: web::Json<SubmitProofParam>,
@@ -317,7 +334,11 @@ async fn submit_batch(
     let deserialized_call: SubmitProofParam = call.into_inner();
     //let mut app = service.lock().unwrap();
 
-    println!("Received request.");
+    println!("Received request to verify and add batch for chain: {}", match deserialized_call.chain { 
+      AppChain::Nft => "NFT Chain", 
+      AppChain::Payments => "Payments Chain"
+    });
+
     match deserialized_call.chain {
       AppChain::Nft => match service.verify_nft_batch(deserialized_call.session_receipt, deserialized_call.receipts) {
         Ok(()) => "Proof Submitted", 
@@ -330,30 +351,40 @@ async fn submit_batch(
     }
 }
 
+fn hex_string_to_u8_array(hex_string: &str) -> [u8; 32] {
+  let bytes = hex::decode(hex_string).unwrap();
+  
+  if bytes.len() != 32 {
+      panic!("Hexadecimal string must represent exactly 32 bytes");
+  }
+
+  let mut array = [0u8; 32];
+  array.copy_from_slice(&bytes);
+
+  array
+}
+
 async fn get_receipt_with_proof(
   service: web::Data<NexusApp>,
-  call: web::Json<TransactionReceipt>,
+  call: web::Query<ReceiptQuery>,
 ) -> impl Responder {
-  let deserialized_call: TransactionReceipt = call.into_inner();
+  let deserialized_call: ReceiptQuery = call.into_inner();
+  let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
   let tree_state = service.tree_state.lock().unwrap();
 
-  let receipt_with_proof = match tree_state.get_with_proof(&deserialized_call.get_key()) {
+  let receipt_with_proof = match tree_state.get_with_proof(&key) {
     Ok(i) => i,
     Err(e) => return HttpResponse::InternalServerError().body("Internal error.")
   };
-  println!("Received request.");
   
   HttpResponse::Ok().json(receipt_with_proof)
 }
 
 async fn get_current_batch(
   service: web::Data<NexusApp>,
-) -> impl Responder {
-  println!("Received request.");
-
+) -> impl Responder { 
   let app_state = service.app_state.lock().unwrap();
 
-  println!("Got app state");
   //TODO: Create method on App or app state to get this.
   let current_batch = app_state.last_aggregated_batch.clone();
 
@@ -368,7 +399,7 @@ pub async fn start_rpc_server(shared_service: NexusApp) -> impl Send {
             .route("/current-batch", web::get().to(get_current_batch))
             .route("/receipt", web::get().to(get_receipt_with_proof))
     })
-    .bind(("127.0.0.1", 8000))
+    .bind(("127.0.0.1", 8080))
     .unwrap()
     .run()
     .await;

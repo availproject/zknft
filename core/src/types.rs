@@ -42,8 +42,8 @@ pub struct Commit {
 pub struct StateUpdate<S> {
     pub pre_state_root: H256,
     pub post_state_root: H256,
-    pub pre_state_with_proof: (Vec<S>, MerkleProof),
-    pub post_state_with_proof: (Vec<S>, MerkleProof),
+    pub pre_state_with_proof: (Vec<(H256, S)>, MerkleProof),
+    pub post_state_with_proof: (Vec<(H256, S)>, MerkleProof),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -101,8 +101,7 @@ pub struct TransactionReceipt {
 
 impl Value for TransactionReceipt {
     fn to_h256(&self) -> H256 {
-        if self.chain_id == 0 &&
-        self.data == vec![0] {
+        if self.chain_id == 0 && self.data == vec![0] {
             return H256::zero();
         }
 

@@ -15,3 +15,4 @@ payments-methods = { path = "../payments_app/methods" }
 risc0-zkvm = {version = "0.16.1"}
 serde = "1.0"
 primitive-types = "0.12.1"
+hex = "0.4.3"

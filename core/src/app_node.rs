@@ -20,8 +20,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::DaService;
-use sparse_merkle_tree::H256;
 use sparse_merkle_tree::traits::Value;
+use sparse_merkle_tree::H256;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 
@@ -120,14 +120,15 @@ impl<
     }
 
     pub async fn execute_batch(&mut self, call_params: T) -> Result<(), Error> {
-        let nexus_url = "http://127.0.0.1:8000/current-batch";
+        let nexus_url = "http://127.0.0.1:8080/current-batch";
         let now = SystemTime::now();
         let last_batch_number: u64 = match &self.db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.batch_number,
             Ok(None) => 0,
             Err(e) => panic!("Could not start node. {:?}", e),
         };
-        //TODO: Add proper error handling below by removing unwrap.
+        //TODO: Add proper error handling below by removing unwrap and store last
+        //batch in memory.
         let aggregated_proof: AggregatedBatch =
             reqwest::get(nexus_url).await.unwrap().json().await.unwrap();
 
@@ -163,8 +164,47 @@ impl<
         // Prove the session to produce a receipt.
         let session_receipt = session.prove().unwrap();
 
-        println!("{:?}", &self.zkvm_id);
+        println!("Session executed in zkvm with ID {:?}", &self.zkvm_id);
         session_receipt.verify(self.zkvm_id).unwrap();
+
+        match now.elapsed() {
+            Ok(elapsed) => {
+                // it prints '2'
+                println!(
+                    "execution done, time elapsed: {}s, tx count: {}, tx hash: {:?}",
+                    elapsed.as_secs(),
+                    last_batch_number + 1,
+                    call_params.to_h256()
+                );
+            }
+            Err(e) => {
+                // an error occurred!
+                println!("Error: {e:?}");
+            }
+        }
+
+        // NEED TO  REWRITE BELOW.
+        let client = reqwest::Client::new();
+        let url = "http://localhost:8080/submit-batch"; // Change this to your server's URL
+
+        let serialized = serde_json::to_string(&SubmitProofParam {
+            session_receipt,
+            receipts: vec![receipt],
+            chain: self.chain.clone(),
+        })
+        .unwrap();
+
+        let response = client
+            .post(url)
+            .body(serialized)
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .unwrap();
+
+        let status = response.status();
+
+        println!("Batch submit call resovled with status: {:?}", status);
 
         //Add batch header.
         match &self.db.put(
@@ -195,44 +235,6 @@ impl<
             Err(e) => return Err(e.clone()),
         }
 
-        match now.elapsed() {
-            Ok(elapsed) => {
-                // it prints '2'
-                println!(
-                    "execution done, time elapsed: {}s, tx count: {}, tx hash: {:?}",
-                    elapsed.as_secs(),
-                    last_batch_number + 1,
-                    call_params.to_h256()
-                );
-            }
-            Err(e) => {
-                // an error occurred!
-                println!("Error: {e:?}");
-            }
-        }
-
-        // NEED TO  REWRITE BELOW.
-        let client = reqwest::Client::new();
-        let url = "http://localhost:8000/submit-batch"; // Change this to your server's URL
-
-        let serialized = serde_json::to_string(&SubmitProofParam {
-            session_receipt,
-            receipts: vec![receipt],
-            chain: self.chain.clone(),
-        })
-        .unwrap();
-        println!("{:?}", &serialized.len());
-
-        let response = client
-            .post(url)
-            .body(serialized)
-            .header("Content-Type", "application/json")
-            .send()
-            .await
-            .unwrap();
-
-        println!("Response status: {:?}", response);
-
         Ok(())
     }
 }
@@ -247,14 +249,14 @@ where
     S: StateMachine<V, T> + std::marker::Send,
 {
     let mut app = service.lock().unwrap();
-    println!("Received request.");
+    println!("Received request for transaction. Starting batch execution.");
 
     app.execute_batch(call.clone()).await;
 
     "Transaction Executed"
 }
 
-pub async fn start_rpc_server<V, T, S>(singleton: AppNode<V, T, S>)
+pub async fn start_rpc_server<V, T, S>(singleton: AppNode<V, T, S>, port: u16)
 where
     V: Serialize + DeserializeOwned + std::marker::Send + 'static,
     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
@@ -267,7 +269,7 @@ where
             .app_data(web::Data::new(shared_service.clone()))
             .route("/", web::post().to(api_handler::<V, T, S>))
     })
-    .bind(("127.0.0.1", 8080))
+    .bind(("127.0.0.1", port))
     .unwrap()
     .run()
     .await;

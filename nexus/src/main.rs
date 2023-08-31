@@ -17,7 +17,7 @@ use std::thread;
 
 #[tokio::main]
 async fn main() {
-    println!("{:?}, {:?}",NFT_ID, TRANSFER_ID);
+    println!("Nexus started, ZKVM IDs: {:?}, and {:?}",NFT_ID, TRANSFER_ID);
     let db = NodeDB::from_path(String::from("./nexus_db"));
     let last_aggregated_batch: AggregatedBatch = match db.get::<AggregatedBatch>(b"last_aggregated_proof") {
         Ok(Some(i)) => i.clone(),
@@ -67,6 +67,4 @@ async fn main() {
 
     // Wait for the RPC server thread to finish
     rpc_thread.join().unwrap();
-
-    println!("Hello, world!");
 }

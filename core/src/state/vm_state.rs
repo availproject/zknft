@@ -10,9 +10,7 @@ use sparse_merkle_tree::{
     default_store::DefaultStore,
     traits::Hasher,
     traits::{StoreReadOps, StoreWriteOps, Value},
-    SparseMerkleTree, 
-    H256,
-    MerkleProof
+    MerkleProof, SparseMerkleTree, H256,
 };
 use std::cmp::PartialEq;
 
@@ -58,7 +56,6 @@ impl<
 
     pub fn update_set(&mut self, set: Vec<V>) -> Result<StateUpdate<V>, Error> {
         let pre_state_root = self.get_root();
-        println!("Update set called.");
         let pre_merkle_proof = self
             .tree
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
@@ -66,7 +63,12 @@ impl<
 
         let pre_merkle_set = set
             .iter()
-            .map(|v| self.tree.get(&v.get_key()).expect("Cannot get from tree."))
+            .map(|v| {
+                (
+                    v.get_key(),
+                    self.tree.get(&v.get_key()).expect("Cannot get from tree."),
+                )
+            })
             .collect();
 
         self.tree
@@ -74,17 +76,18 @@ impl<
             .unwrap();
 
         let post_state_root = self.get_root();
+
+        let post_merkle_set = set.iter().map(|v| (v.get_key(), v.clone())).collect();
         let post_merkle_proof = self
             .tree
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
-        println!("Post merkle state: {:?}", &set);
 
         Ok(StateUpdate {
             pre_state_root,
             post_state_root,
             pre_state_with_proof: (pre_merkle_set, pre_merkle_proof),
-            post_state_with_proof: (set, post_merkle_proof),
+            post_state_with_proof: (post_merkle_set, post_merkle_proof),
         })
     }
 
@@ -108,8 +111,8 @@ impl<
         };
 
         let proof = match self.tree.merkle_proof(vec![key.clone()]) {
-            Ok(i) => i, 
-            Err(_e) => return Err(Error::StateError(StateError::ErroneousState))
+            Ok(i) => i,
+            Err(_e) => return Err(Error::StateError(StateError::ErroneousState)),
         };
 
         Ok((value, proof))

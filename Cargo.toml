@@ -6,7 +6,8 @@ members = [
     "payments_app/host",
     "payments_app/methods",
     "avail", 
-    "nexus"
+    "nexus",
+    "marketplace",
 ]
 
 # Always optimize; building and running the guest takes much longer without optimization.

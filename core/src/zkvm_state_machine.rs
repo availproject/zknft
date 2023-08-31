@@ -39,13 +39,12 @@ impl<
                 .pre_state_with_proof
                 .0
                 .iter()
-                .map(|v| (v.get_key(), v.to_h256()))
+                .map(|v| (v.0, v.1.to_h256()))
                 .collect(),
         ) {
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => {
-                println!("Merkle verification failed.");
                 return Err(Error::Unknown);
             }
             Err(e) => {
@@ -53,21 +52,22 @@ impl<
                 return Err(Error::Unknown);
             }
         };
-        println!("pre state checked.");
 
-        let call_result: Result<(Vec<V>, TransactionReceipt), Error> = self.stf.execute_tx(
-            state_update.pre_state_with_proof.0.clone(),
-            params.clone(),
-            aggregated_proof,
-        );
+        let pre_state: Vec<V> = state_update
+            .pre_state_with_proof
+            .0
+            .into_iter()
+            .map(|(_, v)| v.clone())
+            .collect();
+
+        let call_result: Result<(Vec<V>, TransactionReceipt), Error> =
+            self.stf
+                .execute_tx(pre_state, params.clone(), aggregated_proof);
 
         let (updated_set, receipt): (Vec<V>, TransactionReceipt) = match call_result {
             Ok(v) => v,
             Err(e) => return Err(e),
         };
-        println!("executed.");
-
-        println!("zkvm post merkle set: {:?}", &updated_set);
 
         match state_update
             .post_state_with_proof
@@ -84,11 +84,11 @@ impl<
             //TODO - Change to invalid proof error
             Ok(false) => {
                 println!(
-                    "Merkle verification failed., {:?}, ",
+                    "Merkle verification failed. {:?}",
                     &state_update.post_state_with_proof
                 );
                 println!(
-                    "Merkle verification failed., {:?}, ",
+                    "Merkle verification failed. {:?}",
                     &state_update.post_state_root
                 );
                 return Err(Error::Unknown);
