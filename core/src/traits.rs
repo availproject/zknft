@@ -4,6 +4,7 @@ use crate::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sparse_merkle_tree::H256;
+use sparse_merkle_tree::MerkleProof;
 
 pub trait Leaf<K> {
     fn get_key(&self) -> K;
@@ -16,6 +17,10 @@ pub trait StateMachine<V, T: Clone + DeserializeOwned + Serialize> {
         call: T,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<V>, TransactionReceipt), Error>;
+    fn get_state_with_proof(
+        &self, 
+        key: &H256, 
+    ) -> Result<(V, MerkleProof), Error>;
 }
 
 pub trait StateTransition<V, T> {

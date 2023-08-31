@@ -22,6 +22,7 @@ use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::DaService;
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
+use sparse_merkle_tree::MerkleProof;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 
@@ -189,7 +190,7 @@ impl<
 
         let serialized = serde_json::to_string(&SubmitProofParam {
             session_receipt,
-            receipts: vec![receipt],
+            receipts: vec![receipt.clone()],
             chain: self.chain.clone(),
         })
         .unwrap();
@@ -227,8 +228,8 @@ impl<
         match &self.db.put(
             call_params.to_h256().as_slice(),
             &TransactionWithReceipt {
-                transaction: call_params.clone(),
-                receipt: receipt.clone(),
+                transaction: call_params,
+                receipt: receipt,
             },
         ) {
             Ok(()) => (),
@@ -237,6 +238,46 @@ impl<
 
         Ok(())
     }
+
+    pub fn get_state_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error>{
+        self.state_machine.get_state_with_proof(key)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
+pub struct StateQuery {
+  key: String,
+}
+fn hex_string_to_u8_array(hex_string: &str) -> [u8; 32] {
+    let bytes = hex::decode(hex_string).unwrap();
+    
+    if bytes.len() != 32 {
+        panic!("Hexadecimal string must represent exactly 32 bytes");
+    }
+  
+    let mut array = [0u8; 32];
+    array.copy_from_slice(&bytes);
+  
+    array
+}
+async fn get_state_with_proof<V, T, S>(
+    service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
+    call: web::Query<StateQuery>,
+) -> impl Responder where
+V: Serialize + DeserializeOwned + std::marker::Send,
+T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+S: StateMachine<V, T> + std::marker::Send,
+{
+    let app = service.lock().unwrap();
+    let deserialized_call: StateQuery = call.into_inner();
+    let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
+    
+    let state_with_proof = match app.get_state_with_proof(&key) {
+      Ok(i) => i,
+      Err(e) => return HttpResponse::InternalServerError().body("Internal error.")
+    };
+    
+    HttpResponse::Ok().json(state_with_proof)
 }
 
 async fn api_handler<V, T, S>(
@@ -268,6 +309,7 @@ where
         App::new()
             .app_data(web::Data::new(shared_service.clone()))
             .route("/", web::post().to(api_handler::<V, T, S>))
+            .route("/state", web::get().to(get_state_with_proof::<V, T, S>))
     })
     .bind(("127.0.0.1", port))
     .unwrap()

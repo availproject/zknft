@@ -218,11 +218,11 @@ impl NexusApp {
             Ok(()) => (),
             Err(e) => panic!("Could not start node. {:?}", e),
           }
-          match db.put::<AggregatedBatch>(b"last_aggregated_nft_batch", &app_state.last_aggregated_nft_batch) {
+          match db.put::<BatchHeader>(b"last_aggregated_nft_batch", &app_state.last_aggregated_nft_batch) {
             Ok(()) => (),
             Err(e) => panic!("Could not start node. {:?}", e),
           }
-          match db.put::<AggregatedBatch>(b"last_aggregated_payments_batch", &app_state.last_aggregated_payments_batch) {
+          match db.put::<BatchHeader>(b"last_aggregated_payments_batch", &app_state.last_aggregated_payments_batch) {
             Ok(()) => (),
             Err(e) => panic!("Could not start node. {:?}", e),
           }

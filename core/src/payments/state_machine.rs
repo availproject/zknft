@@ -10,6 +10,7 @@ use crate::{
 };
 use primitive_types::U256;
 use sparse_merkle_tree::traits::Value;
+use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
 
 pub struct PaymentsStateMachine {
@@ -88,5 +89,12 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
             Ok(i) => Ok((i, result.1)),
             Err(e) => Err(e),
         }
+    }
+
+    fn get_state_with_proof(
+        &self, 
+        key: &H256, 
+    ) -> Result<(Account, MerkleProof), Error> {
+        self.state.get_with_proof(key)
     }
 }
