@@ -15,8 +15,7 @@ sparse-merkle-tree = { path = "../../sparse-merkle-tree", optional = true, defau
 thiserror = "1.0.44"
 serde_json = "1.0.103"
 risc0-zkp = {version = "0.16.1", optional = true}
-presence = { path = "../avail", optional = true, default-feature = false }
-sov-rollup-interface = { path = "../rollup-interface", optional = true}
+avail = { path = "../avail", optional = true, default-feature = false }
 
 #HTTP client
 hyper = { version = "0.14.23", optional = true, features = ["server"]}
@@ -27,5 +26,5 @@ hex = "0.4.3"
 
 [features]
 default = ["zkvm"]
-native = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/default", "risc0-zkp", "presence/native", "sov-rollup-interface", "hyper", "tokio", "actix-web", "reqwest"]
+native = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/default", "risc0-zkp", "avail/native", "hyper", "tokio", "actix-web", "reqwest"]
 zkvm = ["sparse-merkle-tree/arch-32", "sparse-merkle-tree/std", "primitive-types", "primitive-types/serde", "risc0-zkvm/std"]

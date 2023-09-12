@@ -8,7 +8,7 @@ use crate::types::Batch;
 use crate::types::BatchHeader;
 use crate::types::TransactionReceipt;
 use crate::types::TransactionWithReceipt;
-use presence::service::DaProvider as AvailDaProvider;
+use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
 use primitive_types::U256;
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
@@ -18,8 +18,6 @@ use risc0_zkvm::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
-use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::services::da::DaService;
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
@@ -47,7 +45,7 @@ pub struct AppNode<V, T: Clone + DeserializeOwned + Serialize, S: StateMachine<V
     zkvm_elf: Box<[u8]>,
     zkvm_id: Digest,
     phantom_v: PhantomData<V>,
-    phantom_t: PhantomData<T>,
+    tx_pool: Vec<T>,
 }
 
 impl<
@@ -78,7 +76,7 @@ impl<
             zkvm_elf: zkvm_elf.into(),
             zkvm_id: zkvm_id.into(),
             phantom_v: PhantomData,
-            phantom_t: PhantomData,
+            tx_pool: vec![]
         }
     }
 
@@ -89,16 +87,14 @@ impl<
     //TODO: Complete implementation.
     pub async fn sync(&mut self) -> Result<(), Error> {
         let start_height = 283562;
-        let node_client =
-            presence::build_client("wss://kate.avail.tools:443/ws".to_string(), false)
-                .await
-                .unwrap();
         let light_client_url = "http://127.0.0.1:8000".to_string();
         // Initialize the Avail service using the DaService interface
-        let da_service = AvailDaProvider {
-            node_client,
+        let da_service = AvailDaProvider::new(DaServiceConfig {
+            node_client_url: "wss://kate.avail.tools:443/ws".to_string(),
             light_client_url,
-        };
+            seed: String::from("demo_seed"), 
+            app_id: 7,
+        }).await;
 
         for height in start_height.. {
             let filtered_block = match da_service.get_finalized_at(height).await {
