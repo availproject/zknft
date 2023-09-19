@@ -84,4 +84,10 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
     ) -> Result<(Nft, MerkleProof), Error> {
         self.state.get_with_proof(key)
     }
+
+    fn revert(&mut self, root: H256) -> Result<(), Error> {
+        self.state = VmState::new(root);
+
+        Ok(())
+    }
 }

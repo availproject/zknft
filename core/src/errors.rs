@@ -20,7 +20,7 @@ pub enum Error {
 }
 
 impl Error {
-    fn default() -> Self {
+    pub fn default() -> Self {
         Error::Unknown
     }
 }

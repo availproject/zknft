@@ -157,7 +157,7 @@ impl DaProvider {
         self.get_finalized_at(height).await
     }
 
-    async fn send_transaction(&self, blob: &[u8]) -> Result<(), anyhow::Error> {
+    pub async fn send_transaction(&self, blob: &[u8]) -> Result<(), anyhow::Error> {
       let data_transfer = api::tx()
       .data_availability()
       .submit_data(BoundedVec(blob.to_vec()));

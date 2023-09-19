@@ -28,8 +28,14 @@ async fn main() {
         TRANSFER_ID,
         AppChain::Payments,
     );
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-    println!("{:?}", TRANSFER_ID);
-    start_rpc_server(app, 7001).await;
+    let mut app_clone = app.clone();
+    rt.block_on(async move {
+        tokio::spawn(async move { app.run().await });
+
+        start_rpc_server(app_clone, 7001).await;
+    });
+    
     ()
 }

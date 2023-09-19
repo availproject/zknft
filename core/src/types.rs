@@ -71,13 +71,14 @@ impl BatchHeader {
 
 #[cfg(feature = "native")]
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Batch<T> {
+pub struct BatchWithProof<T> {
     pub header: BatchHeader,
-    pub transactions: Vec<T>,
+    pub transaction_with_receipts: Vec<TransactionWithReceipt<T>>,
+    pub proof: SessionReceipt,
 }
 
 #[cfg(feature = "native")]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TransactionWithReceipt<T> {
     pub transaction: T,
     pub receipt: TransactionReceipt,
@@ -88,16 +89,6 @@ pub struct TransactionReceipt {
     pub chain_id: u64,
     pub data: Vec<u8>,
 }
-
-// impl TransactionReceipt {
-//     pub fn to_h256(&self) -> H256 {
-//         let mut hasher = ShaHasher::new();
-//         let serialized = bincode::serialize(&self).unwrap();
-//         hasher.0.update(&serialized);
-
-//         hasher.finish()
-//     }
-// }
 
 impl Value for TransactionReceipt {
     fn to_h256(&self) -> H256 {

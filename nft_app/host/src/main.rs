@@ -20,8 +20,7 @@ use sparse_merkle_tree::{
 };
 use std::time::SystemTime;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let mut app = AppNode::<Nft, NftTransaction, NftStateMachine>::new(
         AppNodeRuntimeConfig {
             prover_mode: true
@@ -30,8 +29,14 @@ async fn main() {
         TRANSFER_ID, 
         AppChain::Nft
     );
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
 
-    println!("{:?}", TRANSFER_ID);
-    start_rpc_server(app, 7000).await;
+    let mut app_clone = app.clone();
+    rt.block_on(async move {
+        tokio::spawn(async move { app.run().await });
+        
+        start_rpc_server(app_clone, 7000).await;
+    });
+    
     ()
 }

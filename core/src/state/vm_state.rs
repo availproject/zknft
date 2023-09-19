@@ -83,6 +83,8 @@ impl<
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
 
+        println!("Pre: {:?} || Post {:?}", pre_merkle_proof.clone(), post_merkle_proof.clone());
+
         Ok(StateUpdate {
             pre_state_root,
             post_state_root,

@@ -1,4 +1,4 @@
-mod avail;
+pub mod avail;
 
 #[cfg(feature = "native")]
 pub mod service;
