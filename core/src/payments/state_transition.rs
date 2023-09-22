@@ -2,13 +2,14 @@ use crate::traits::StateTransition;
 use crate::{
     errors::Error,
     payments::types::{
-        Account, Address, CallType, PaymentReceiptData, Transaction as PaymentsTransaction,
+        Account, CallType, PaymentReceiptData, Transaction as PaymentsTransaction, TransactionMessage
     },
     traits::StateMachine,
-    types::{AggregatedBatch, StateUpdate, TransactionReceipt},
+    types::{AggregatedBatch, StateUpdate, TransactionReceipt, Address},
 };
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
+use ed25519_dalek::SignatureError;
 
 pub struct PaymentsStateTransition {
     chain_id: u64,
@@ -24,7 +25,7 @@ impl PaymentsStateTransition {
 
     fn transfer(
         &self,
-        params: PaymentsTransaction,
+        params: TransactionMessage,
         pre_state: Vec<Account>,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
         let mut from_account: Account = match pre_state[0].clone() {
@@ -76,7 +77,7 @@ impl PaymentsStateTransition {
 
     fn mint(
         &self,
-        params: PaymentsTransaction,
+        params: TransactionMessage,
         pre_state: Vec<Account>,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
         let mut from_account: Account = match pre_state[0].clone() {
@@ -145,9 +146,14 @@ impl StateTransition<Account, PaymentsTransaction> for PaymentsStateTransition {
         params: PaymentsTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
-        match params.call_type {
-            CallType::Transfer => self.transfer(params, pre_state.clone()),
-            CallType::Mint => self.mint(params, pre_state.clone()),
+        match params.message.from.verify_msg(&params.signature, &params.message.to_vec(), ) {
+            true => (), 
+            false => return Err(Error::StateTransition(String::from("Signature verification."))),
+        }
+
+        match params.message.call_type {
+            CallType::Transfer => self.transfer(params.message, pre_state.clone()),
+            CallType::Mint => self.mint(params.message, pre_state.clone()),
         }
     }
 }

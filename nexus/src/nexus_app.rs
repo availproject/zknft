@@ -153,6 +153,8 @@ impl NexusApp {
             }
         };
 
+        self.da_start_height = da_last_height;
+
         loop {
             let filtered_nft_da_block = match self
                 .nft_da_service
@@ -210,53 +212,46 @@ impl NexusApp {
         filtered_nft_da_block: AvailBlock,
         filtered_payments_da_block: AvailBlock,
     ) -> () {
-        let mut app_state = self.app_state.lock().unwrap();
-        let mut tree_state = self.tree_state.lock().unwrap();
-        let mut db = self.db.lock().unwrap();
-
         let pending_nft_batch_count = filtered_nft_da_block.transactions.len();
         let pending_payments_batch_count = filtered_payments_da_block.transactions.len();
         println!(
             "aggregating proofs: {:?}, {:?}",
             pending_nft_batch_count, pending_payments_batch_count
         );
-
-        println!("Current root is: {:?}", &app_state.last_aggregated_batch);
-
         let mut receipts_to_add: Vec<TransactionReceipt> = vec![];
 
         for height in 0..pending_nft_batch_count {
-            let next_batch = match from_json_slice::<BatchWithProof<NftTransaction>>(
+            println!("Decoding next batch.");
+            let next_batch = match bincode::deserialize::<BatchWithProof<NftTransaction>>(
                 filtered_nft_da_block.transactions[height].blob(),
             ) {
                 Ok(i) => i,
                 //Ignoring tx blob if deserialisation failed.
                 Err(e) => continue,
             };
-
+            println!("Decoded");
             let mut tx_receipts: Vec<TransactionReceipt> = vec![];
             for tx in &next_batch.transaction_with_receipts {
                 tx_receipts.push(tx.receipt.clone());
             }
-
+            println!("Verifying nft batch.");
             match self.verify_nft_batch(next_batch.proof, tx_receipts.clone()) {
                 Ok(i) => i,
                 //TODO: Log rejected batches.
                 Err(e) => continue,
             }
-
+            println!("Add receipts.");
             receipts_to_add.extend(tx_receipts);
 
-            if height == pending_payments_batch_count - 1 {
+            if height == pending_nft_batch_count - 1 {
+                let mut app_state = self.app_state.lock().unwrap();
                 //TODO: Below should not be changed before final aggregation.
                 app_state.last_aggregated_nft_batch = next_batch.header.clone();
             }
         }
 
-        let pending_payments_batch_count = app_state.verified_payments_batches.proof_count();
-
         for height in 0..pending_payments_batch_count {
-            let next_batch = match from_json_slice::<BatchWithProof<PaymentsTransaction>>(
+            let next_batch = match bincode::deserialize::<BatchWithProof<PaymentsTransaction>>(
                 filtered_payments_da_block.transactions[height].blob(),
             ) {
                 Ok(i) => i,
@@ -278,10 +273,15 @@ impl NexusApp {
             receipts_to_add.extend(tx_receipts);
 
             if height == pending_payments_batch_count - 1 {
+                let mut app_state = self.app_state.lock().unwrap();
                 //TODO: Below should not be changed before final aggregation.
                 app_state.last_aggregated_payments_batch = next_batch.header.clone();
             }
         }
+
+        let mut app_state = self.app_state.lock().unwrap();
+        let mut tree_state = self.tree_state.lock().unwrap();
+        let mut db = self.db.lock().unwrap();
 
         if receipts_to_add.len() > 0 {
             let state_update = match tree_state.update_set(receipts_to_add) {

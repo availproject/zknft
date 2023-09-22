@@ -7,6 +7,9 @@ use sparse_merkle_tree::{
     traits::{Hasher, Value},
     MerkleProof, H256,
 };
+use ed25519_consensus::Signature;
+use ed25519_consensus::VerificationKey;
+use serde_big_array::BigArray;
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -88,6 +91,63 @@ pub struct TransactionWithReceipt<T> {
 pub struct TransactionReceipt {
     pub chain_id: u64,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TxSignature (
+    #[serde(with = "BigArray")]
+    [u8; 64]
+);
+
+impl TxSignature {
+    pub fn from(s: Signature) -> Self {
+        Self (s.to_bytes().clone())
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 64] {
+        &self.0
+    }
+
+    pub fn as_signature(&self) -> Signature {
+        Signature::from(self.0.clone())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
+pub struct Address(pub H256);
+
+impl Address {
+    pub fn verification_key(&self) -> VerificationKey {
+        let mut key: [u8; 32] = Default::default();
+        let public_key = self.0.as_slice();
+
+        key.copy_from_slice(public_key);
+
+        //TODO: Better error handling.
+        VerificationKey::try_from(key).unwrap()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == H256::zero()
+    }
+
+    pub fn verify_msg(&self, sig: &TxSignature, msg: &[u8]) -> bool {
+        let verification_key = self.verification_key();
+
+        //TODO: Return error instead.
+        match verification_key.verify(&sig.as_signature(), msg) {
+            Ok(()) => true, 
+            Err(_) => false, 
+        }
+    }
+
+    pub fn get_key(&self) -> H256 {
+        self.0
+    }
+
+    pub fn zero() -> Self {
+        Self(H256::zero())
+    }
 }
 
 impl Value for TransactionReceipt {

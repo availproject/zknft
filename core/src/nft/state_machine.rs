@@ -2,7 +2,7 @@ use crate::traits::StateTransition;
 use crate::{
     errors::Error,
     nft::state_transition::NftStateTransition,
-    nft::types::{Nft, NftId, NftTransaction},
+    nft::types::{Nft, NftId, NftTransaction, NftTransactionMessage},
     state::VmState,
     traits::StateMachine,
     types::{AggregatedBatch, StateUpdate, TransactionReceipt},
@@ -53,11 +53,11 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         params: NftTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<Nft>, TransactionReceipt), Error> {
-        let nft_id = match params {
-            NftTransaction::Transfer(ref i) => i.id.clone(),
-            NftTransaction::Mint(ref i) => i.id.clone(),
-            NftTransaction::Burn(ref i) => i.id.clone(),
-            NftTransaction::Trigger(ref i) => i.id.clone(),
+        let nft_id = match params.message {
+            NftTransactionMessage::Transfer(ref i) => i.id.clone(),
+            NftTransactionMessage::Mint(ref i) => i.id.clone(),
+            NftTransactionMessage::Burn(ref i) => i.id.clone(),
+            NftTransactionMessage::Trigger(ref i) => i.id.clone(),
         };
         let nft_key = nft_id.get_key();
 

@@ -4,7 +4,7 @@ use nft_core::{
         types::{Nft, NftTransaction, NftId},
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeRuntimeConfig, start_rpc_server, AppChain}
+    app_node::{AppNode, AppNodeConfig, start_rpc_server, AppChain}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use primitive_types::U256;
@@ -21,15 +21,19 @@ use sparse_merkle_tree::{
 use std::time::SystemTime;
 
 fn main() {
-    let mut app = AppNode::<Nft, NftTransaction, NftStateMachine>::new(
-        AppNodeRuntimeConfig {
-            prover_mode: true
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let mut app = rt.block_on(async move {AppNode::<Nft, NftTransaction, NftStateMachine>::new(
+        AppNodeConfig {
+            prover_mode: true, 
+            light_client_url: String::from("http://127.0.0.1:8001"), 
+            node_client_url: String::from("wss://kate.avail.tools:443/ws"),
+            seed: String::from("clock network cage hen enough climb pencil visual spike eye marriage globe"),
+            app_id: 7,
         }, 
         TRANSFER_ELF, 
         TRANSFER_ID, 
         AppChain::Nft
-    );
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    ).await });
 
     let mut app_clone = app.clone();
     rt.block_on(async move {

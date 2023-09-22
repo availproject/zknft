@@ -10,6 +10,7 @@ use sp_core::crypto::Pair as PairTrait;
 use sp_keyring::sr25519::sr25519::Pair;
 use subxt::tx::PairSigner;
 use subxt::OnlineClient;
+use subxt::Config;
 
 use crate::avail::AvailBlobTransaction;
 use crate::avail::AvailBlock;
@@ -158,11 +159,17 @@ impl DaProvider {
     }
 
     pub async fn send_transaction(&self, blob: &[u8]) -> Result<(), anyhow::Error> {
+    println!("DStarted submissions");
+
       let data_transfer = api::tx()
       .data_availability()
       .submit_data(BoundedVec(blob.to_vec()));
-      
+    println!("created extrinsic");
+
+      println!("blob {:?}", &blob);
+        
       let extrinsic_params = AvailExtrinsicParams::new_with_app_id(self.app_id.into());
+      println!("Signing and sending extrinsic to app id signer: {:#?}", &self.signer.account_id());
 
       let h = self.node_client
       .tx()
@@ -173,5 +180,4 @@ impl DaProvider {
 
       Ok(())
     }
-
 }

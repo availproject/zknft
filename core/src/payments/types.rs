@@ -1,6 +1,6 @@
 use crate::{
     traits::{Leaf, TxHasher},
-    types::ShaHasher,
+    types::{ShaHasher, TxSignature, Address},
 };
 use risc0_zkvm::sha::rust_crypto::Digest;
 use serde::{Deserialize, Serialize};
@@ -8,10 +8,7 @@ use sparse_merkle_tree::{
     traits::{Hasher, Value},
     H256,
 };
-
-//pub type Hash256 = [u8; 32];
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
-pub struct Address(pub H256);
+use ed25519_consensus::Signature;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
 pub struct Account {
@@ -23,12 +20,6 @@ pub struct Account {
 impl Leaf<H256> for Account {
     fn get_key(&self) -> H256 {
         self.address.get_key()
-    }
-}
-
-impl Address {
-    pub fn get_key(&self) -> H256 {
-        self.0
     }
 }
 
@@ -59,6 +50,12 @@ pub enum CallType {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Transaction {
+    pub message: TransactionMessage,
+    pub signature: TxSignature,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct TransactionMessage {
     pub from: Address,
     pub to: Address,
     pub amount: u64,
@@ -73,6 +70,18 @@ impl TxHasher for Transaction {
         hasher.0.update(&serialized);
 
         hasher.finish()
+    }
+}
+
+impl Transaction {
+    pub fn signature(&self) -> Signature {
+        Signature::from(self.signature.as_bytes().clone())
+    }
+}
+
+impl TransactionMessage {
+    pub fn to_vec(&self) -> Vec<u8> {
+        bincode::serialize(&self).unwrap()
     }
 }
 

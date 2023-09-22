@@ -18,6 +18,8 @@ use risc0_zkvm::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
+use std::fs::File;
+use std::io::Write;
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
@@ -25,6 +27,9 @@ use std::marker::PhantomData;
 use std::time::SystemTime;
 use std::time::Duration;
 use std::mem;
+use std::io::prelude::*;
+use flate2::Compression;
+use flate2::write::ZlibEncoder;
 
 //Below imports for HTTP server.
 use actix_web::error;
@@ -35,6 +40,7 @@ use reqwest;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
 
 #[derive(Clone)]
 pub struct AppNodeConfig {
@@ -160,6 +166,7 @@ impl<
                     Ok(()) => (), 
                     Err(e) => {
                         let mut state_machine = self.state_machine.lock().await;
+                        println!("Reverting state machine.");
 
                         match state_machine.revert(last_state_root) {
                             Ok(()) => (), 
@@ -245,7 +252,7 @@ impl<
                 receipt: receipt.clone(),
             };
 
-            to_json_vec(&BatchWithProof {
+            bincode::serialize(&BatchWithProof {
                 header: batch_header,
                 proof: session_receipt,
                 transaction_with_receipts: vec![transaction_with_receipt.clone()],
@@ -253,42 +260,19 @@ impl<
             .unwrap()
         };
 
-        match now.elapsed() {
-            Ok(elapsed) => {
-                // it prints '2'
-                println!(
-                    "execution done, time elapsed: {}s, tx count: {}, tx hash: {:?}",
-                    elapsed.as_secs(),
-                    last_batch_number + 1,
-                    call_params.to_h256()
-                );
-            }
-            Err(e) => {
-                // an error occurred!
-                println!("Error: {e:?}");
-            }
-        }
+        
+        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+        e.write_all(&serialized);
+        let compressed_bytes = e.finish().unwrap();
 
-        // NEED TO  REWRITE BELOW.
-        // let client = reqwest::Client::new();
-        // let url = "http://localhost:8080/submit-batch"; // Change this to your server's URL
-
-        // let response = client
-        //     .post(url)
-        //     .body(serialized)
-        //     .header("Content-Type", "application/json")
-        //     .send()
-        //     .await
-        //     .unwrap();
-
-        // let status = response.status();
-
-        // println!("Batch submit call resovled with status: {:?}", status);
-
+        println!("Compressed length: {}", compressed_bytes.len());
         match self.da_service.send_transaction(&serialized).await {
             Ok(i) => (), 
             //Change from default error.
-            Err(e) => return Err(Error::default()),
+            Err(e) => {
+                println!("error {:?}", e);
+                return Err(Error::default())
+            },
         };
 
         //Add batch header.
@@ -307,7 +291,10 @@ impl<
             },
         ) {
             Ok(()) => (),
-            Err(e) => return Err(e.clone()),
+            Err(e) => {
+                println!("error {:?}", e);
+                return Err(e.clone())
+            },
         };
 
         let transaction_with_receipt = TransactionWithReceipt {

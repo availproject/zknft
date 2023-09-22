@@ -17,6 +17,7 @@ pub enum Error {
     StateError(StateError),
     Unknown,
     DBError(DBError),
+    StateTransition(String),
 }
 
 impl Error {
