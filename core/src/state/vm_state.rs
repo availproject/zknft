@@ -5,11 +5,10 @@ use crate::{
     types::StateUpdate,
 };
 use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use sparse_merkle_tree::{
-    default_store::DefaultStore,
     traits::Hasher,
-    traits::{StoreReadOps, StoreWriteOps, Value},
+    traits::{Value},
     MerkleProof, SparseMerkleTree, H256,
 };
 use std::cmp::PartialEq;
@@ -83,7 +82,7 @@ impl<
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
 
-        println!("Pre: {:?} || Post {:?}", pre_merkle_proof.clone(), post_merkle_proof.clone());
+        println!("Pre: {:?} || Post {:?}", pre_merkle_proof, post_merkle_proof);
 
         Ok(StateUpdate {
             pre_state_root,
@@ -112,7 +111,7 @@ impl<
             Err(_e) => return Err(Error::StateError(StateError::ErroneousState)),
         };
 
-        let proof = match self.tree.merkle_proof(vec![key.clone()]) {
+        let proof = match self.tree.merkle_proof(vec![*key]) {
             Ok(i) => i,
             Err(_e) => return Err(Error::StateError(StateError::ErroneousState)),
         };

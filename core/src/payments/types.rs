@@ -75,7 +75,7 @@ impl TxHasher for Transaction {
 
 impl Transaction {
     pub fn signature(&self) -> Signature {
-        Signature::from(self.signature.as_bytes().clone())
+        Signature::from(*self.signature.as_bytes())
     }
 }
 

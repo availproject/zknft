@@ -2,7 +2,7 @@ use crate::traits::Leaf;
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
 #[cfg(feature = "native")]
 use risc0_zkvm::SessionReceipt;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::{
     traits::{Hasher, Value},
     MerkleProof, H256,
@@ -101,7 +101,7 @@ pub struct TxSignature (
 
 impl TxSignature {
     pub fn from(s: Signature) -> Self {
-        Self (s.to_bytes().clone())
+        Self (s.to_bytes())
     }
 
     pub fn as_bytes(&self) -> &[u8; 64] {
@@ -109,7 +109,7 @@ impl TxSignature {
     }
 
     pub fn as_signature(&self) -> Signature {
-        Signature::from(self.0.clone())
+        Signature::from(self.0)
     }
 }
 

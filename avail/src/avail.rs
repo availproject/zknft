@@ -4,7 +4,7 @@ use avail_subxt::api::runtime_types::{
 };
 use avail_subxt::primitives::AppUncheckedExtrinsic;
 use avail_subxt::primitives::Header as SubxtHeader;
-use bytes::Bytes;
+
 #[cfg(feature = "native")]
 use codec::Encode;
 use core::fmt::{Display, Formatter};
@@ -86,7 +86,7 @@ pub struct AvailHeader {
 impl AvailHeader {
     pub fn new(header: SubxtHeader, hash: H256) -> Self {
         Self {
-            hash: hash,
+            hash,
             header: Header {
                 parent_hash: header.parent_hash,
                 number: header.number,
@@ -98,7 +98,7 @@ impl AvailHeader {
     }
 
     fn hash(&self) -> H256 {
-        self.hash.clone()
+        self.hash
     }
 }
 

@@ -9,7 +9,6 @@ use crate::{
 };
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
-use ed25519_dalek::SignatureError;
 
 pub struct PaymentsStateTransition {
     chain_id: u64,

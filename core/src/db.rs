@@ -1,6 +1,6 @@
 use crate::errors::{DBError, Error};
 use rocksdb::{Options, DB};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{from_slice, to_vec};
 use sparse_merkle_tree::H256;
 
@@ -43,9 +43,9 @@ impl NodeDB {
     }
 
     pub fn delete(&self, serialized_key: &[u8]) -> Result<(), Error> {
-        match self.db.get(&serialized_key) {
+        match self.db.get(serialized_key) {
             Err(e) => Err(Error::DBError(DBError(e.to_string()))),
-            Ok(Some(_)) => match self.db.delete(&serialized_key) {
+            Ok(Some(_)) => match self.db.delete(serialized_key) {
                 Err(e) => Err(Error::DBError(DBError(e.to_string()))),
                 _ => Ok(()),
             },

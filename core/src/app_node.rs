@@ -1,6 +1,6 @@
 use crate::db::NodeDB;
 use crate::errors::Error;
-use crate::state::VmState;
+
 use crate::traits::StateMachine;
 use crate::traits::TxHasher;
 use crate::types::AggregatedBatch;
@@ -9,7 +9,7 @@ use crate::types::BatchHeader;
 use crate::types::TransactionReceipt;
 use crate::types::TransactionWithReceipt;
 use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
-use primitive_types::U256;
+
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
     default_executor_from_elf,
@@ -17,8 +17,8 @@ use risc0_zkvm::{
     ExecutorEnv, SessionReceipt,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
-use std::fs::File;
+
+
 use std::io::Write;
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
@@ -26,18 +26,18 @@ use sparse_merkle_tree::MerkleProof;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 use std::time::Duration;
-use std::mem;
+
 use std::io::prelude::*;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
 //Below imports for HTTP server.
-use actix_web::error;
-use actix_web::rt::System;
+
+
 use actix_web::HttpResponse;
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder};
 use reqwest;
-use std::convert::Infallible;
+
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -77,7 +77,7 @@ impl<
             da_service: self.da_service.clone(),
             chain: self.chain.clone(),
             zkvm_elf: self.zkvm_elf.clone(),
-            zkvm_id: self.zkvm_id.clone(),
+            zkvm_id: self.zkvm_id,
             phantom_v: PhantomData,
             tx_pool: self.tx_pool.clone()
         }
@@ -91,7 +91,7 @@ impl<
     ) -> Self {
         let node_db = NodeDB::from_path(String::from("./node_db"));
         let last_state_root: H256 = match node_db.get::<BatchHeader>(b"last_batch_header") {
-            Ok(Some(i)) => i.state_root.clone(),
+            Ok(Some(i)) => i.state_root,
             Ok(None) => H256::zero(),
             Err(e) => panic!("Could not start node. {:?}", e),
         };
@@ -156,7 +156,7 @@ impl<
                     let db = self.db.lock().await;
 
                     match db.get::<BatchHeader>(b"last_batch_header") {
-                    Ok(Some(i)) => i.state_root.clone(),
+                    Ok(Some(i)) => i.state_root,
                     Ok(None) => H256::zero(),
                     Err(e) => panic!("Could not start node. {:?}", e),
                     }
@@ -164,13 +164,13 @@ impl<
 
                 match self.execute_batch(tx_pool[0].clone()).await {
                     Ok(()) => (), 
-                    Err(e) => {
+                    Err(_e) => {
                         let mut state_machine = self.state_machine.lock().await;
                         println!("Reverting state machine.");
 
                         match state_machine.revert(last_state_root) {
                             Ok(()) => (), 
-                            Err(e) => panic!("Reverting state failed. Need to restart node."),
+                            Err(_e) => panic!("Reverting state failed. Need to restart node."),
                         };
                     }
                 }
@@ -188,7 +188,7 @@ impl<
 
     pub async fn execute_batch(&self, call_params: T) -> Result<(), Error> {
         let nexus_url = "http://127.0.0.1:8080/current-batch";
-        let now = SystemTime::now();
+        let _now = SystemTime::now();
         let last_batch_number: u64 = {
             let db = self.db.lock().await;
 
@@ -255,7 +255,7 @@ impl<
             bincode::serialize(&BatchWithProof {
                 header: batch_header,
                 proof: session_receipt,
-                transaction_with_receipts: vec![transaction_with_receipt.clone()],
+                transaction_with_receipts: vec![transaction_with_receipt],
             })
             .unwrap()
         };
@@ -267,7 +267,7 @@ impl<
 
         println!("Compressed length: {}", compressed_bytes.len());
         match self.da_service.send_transaction(&serialized).await {
-            Ok(i) => (), 
+            Ok(_i) => (), 
             //Change from default error.
             Err(e) => {
                 println!("error {:?}", e);
@@ -281,8 +281,8 @@ impl<
         match &db.put(
             b"last_batch_header",
             &BatchHeader {
-                pre_state_root: state_update.pre_state_root.clone(),
-                state_root: state_update.post_state_root.clone(),
+                pre_state_root: state_update.pre_state_root,
+                state_root: state_update.post_state_root,
                 //TODO: Change both below to hash list of transactions and
                 //not single one.
                 transactions_root: call_params.to_h256(),
@@ -314,7 +314,7 @@ impl<
         Ok(())
     }
 
-    pub async fn add_to_tx_pool(&self, tx: T) -> () {
+    pub async fn add_to_tx_pool(&self, tx: T) {
         let mut tx_pool = self.tx_pool.lock().await;
 
         tx_pool.push(tx)
@@ -357,7 +357,7 @@ S: StateMachine<V, T> + std::marker::Send,
     
     let state_with_proof = match app.get_state_with_proof(&key).await {
       Ok(i) => i,
-      Err(e) => return HttpResponse::InternalServerError().body("Internal error.")
+      Err(_e) => return HttpResponse::InternalServerError().body("Internal error.")
     };
     
     HttpResponse::Ok().json(state_with_proof)
@@ -372,7 +372,7 @@ where
     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
     S: StateMachine<V, T> + std::marker::Send,
 {
-    let mut app = service.lock().await;
+    let app = service.lock().await;
     println!("Adding transaction to pool.");
 
     app.add_to_tx_pool(call.clone()).await;

@@ -2,7 +2,7 @@ use crate::{
     errors::Error,
     types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
 

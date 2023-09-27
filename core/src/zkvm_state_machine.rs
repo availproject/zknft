@@ -57,7 +57,7 @@ impl<
             .pre_state_with_proof
             .0
             .into_iter()
-            .map(|(_, v)| v.clone())
+            .map(|(_, v)| v)
             .collect();
 
         let call_result: Result<(Vec<V>, TransactionReceipt), Error> =

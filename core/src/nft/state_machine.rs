@@ -2,12 +2,12 @@ use crate::traits::StateTransition;
 use crate::{
     errors::Error,
     nft::state_transition::NftStateTransition,
-    nft::types::{Nft, NftId, NftTransaction, NftTransactionMessage},
+    nft::types::{Nft, NftTransaction, NftTransactionMessage},
     state::VmState,
     traits::StateMachine,
     types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
-use primitive_types::U256;
+
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
@@ -19,7 +19,7 @@ pub struct NftStateMachine {
 
 impl StateMachine<Nft, NftTransaction> for NftStateMachine {
     fn new(root: H256) -> Self {
-        let mut state = VmState::new(root);
+        let state = VmState::new(root);
 
         // TODO: Add below commented code to init, so pre_state_root matches.
         // if state.get_root() == H256::zero() {

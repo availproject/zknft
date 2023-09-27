@@ -2,7 +2,7 @@ use nft_core::{
     app_node::{start_rpc_server, AppChain, AppNode, AppNodeRuntimeConfig},
     payments::{
         state_machine::PaymentsStateMachine,
-        types::{Account, Address, CallType, Transaction},
+        types::{Account, CallType, Transaction},
     },
     traits::StateMachine,
 };

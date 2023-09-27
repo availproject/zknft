@@ -1,5 +1,5 @@
 use rocksdb::{Options, DB};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{from_slice, to_vec};
 use sparse_merkle_tree::error::Error;
 use sparse_merkle_tree::traits::{StoreReadOps, StoreWriteOps};
@@ -31,13 +31,13 @@ impl MerkleStore {
     }
 
     pub fn get<V: DeserializeOwned>(&self, serialized_key: &[u8]) -> Result<Option<V>, Error> {
-        let value = match self.db.get(serialized_key) {
+        
+
+        match self.db.get(serialized_key) {
             Err(e) => Err(Error::Store(e.to_string())),
             Ok(None) => Ok(None),
             Ok(Some(i)) => Ok(from_slice::<Option<V>>(&i).unwrap()),
-        };
-
-        value
+        }
     }
 
     pub fn put<V: Serialize>(&self, serialized_key: &[u8], value: &V) -> Result<(), Error> {
@@ -48,9 +48,9 @@ impl MerkleStore {
     }
 
     pub fn delete(&self, serialized_key: &[u8]) -> Result<(), Error> {
-        match self.db.get(&serialized_key) {
+        match self.db.get(serialized_key) {
             Err(e) => Err(Error::Store(e.to_string())),
-            Ok(Some(_)) => match self.db.delete(&serialized_key) {
+            Ok(Some(_)) => match self.db.delete(serialized_key) {
                 Err(e) => Err(Error::Store(e.to_string())),
                 _ => Ok(()),
             },
@@ -72,7 +72,7 @@ impl<V: DeserializeOwned> StoreReadOps<V> for MerkleStore {
     fn get_leaf(&self, leaf_key: &H256) -> Result<Option<V>, Error> {
         let key = leaf_key.as_slice();
 
-        self.get(&key)
+        self.get(key)
     }
 }
 
@@ -102,6 +102,6 @@ impl<V: Serialize> StoreWriteOps<V> for MerkleStore {
     fn remove_leaf(&mut self, leaf_key: &H256) -> Result<(), Error> {
         let serialized_key = leaf_key.as_slice();
 
-        self.delete(&serialized_key)
+        self.delete(serialized_key)
     }
 }

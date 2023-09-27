@@ -1,7 +1,7 @@
 #![no_main]
 use nft_core::{     
     payments::{
-        types::{Account, Address, CallType, Transaction},
+        types::{Account, CallType, Transaction},
         state_transition::PaymentsStateTransition
     },
     types::{StateUpdate, AggregatedBatch}, 

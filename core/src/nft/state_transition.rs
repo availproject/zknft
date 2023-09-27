@@ -9,7 +9,7 @@ use crate::{
 };
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
-use sha2::Sha512;
+
 use sha2::Digest;
 
 pub struct NftStateTransition;
@@ -57,7 +57,7 @@ impl NftStateTransition {
             Some(i) => Ok((
                 vec![Nft {
                     id: params.id.clone(),
-                    owner: pre_state.owner.clone(),
+                    owner: pre_state.owner,
                     future: Some(Future {
                         to: params.to.clone(),
                         commitment: i,
@@ -165,7 +165,7 @@ impl NftStateTransition {
             Some(i) => Ok((
                 vec![Nft {
                     id: params.id.clone(),
-                    owner: pre_state.owner.clone(),
+                    owner: pre_state.owner,
                     future: Some(Future {
                         to: Address::zero(),
                         commitment: i,
@@ -206,11 +206,11 @@ impl NftStateTransition {
         match params.merkle_proof.verify::<ShaHasher>(
             &aggregated_proof.receipts_root,
             //Checks both inclusion or non inclusion.
-            vec![(future.commitment.clone(), params.receipt.to_h256())],
+            vec![(future.commitment, params.receipt.to_h256())],
         ) {
             Ok(true) => (),
             Ok(false) => panic!("Invalid merkle proof."),
-            Err(e) => panic!("Error while verifying merkle"),
+            Err(_e) => panic!("Error while verifying merkle"),
         }
 
         let updated_nonce = pre_state.nonce + 1;

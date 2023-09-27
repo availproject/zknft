@@ -10,7 +10,7 @@ use sp_core::crypto::Pair as PairTrait;
 use sp_keyring::sr25519::sr25519::Pair;
 use subxt::tx::PairSigner;
 use subxt::OnlineClient;
-use subxt::Config;
+
 
 use crate::avail::AvailBlobTransaction;
 use crate::avail::AvailBlock;

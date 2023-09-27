@@ -124,7 +124,7 @@ pub struct NftTransaction {
 
 impl NftTransaction {
     pub fn signature(&self) -> Signature {
-        Signature::from(self.signature.as_bytes().clone())
+        Signature::from(*self.signature.as_bytes())
     }
 }
 
