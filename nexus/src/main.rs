@@ -1,6 +1,6 @@
-mod errors;
 mod nexus_app;
 mod store;
+mod types;
 
 use crate::nexus_app::{AggregatedBatch, AppState};
 use nexus_app::{start_rpc_server, NexusApp};
@@ -69,7 +69,7 @@ fn main() {
         shared_tree, 
         shared_app_state, 
         shared_db, 
-        465660,
+        490325,
         nft_da_service, 
         payments_da_service,
     );

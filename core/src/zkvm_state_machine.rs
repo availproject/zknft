@@ -1,10 +1,10 @@
 use crate::{
-    errors::Error,
     traits::{Leaf, StateTransition, TxHasher},
     types::{AggregatedBatch, BatchHeader, ShaHasher, StateUpdate, TransactionReceipt},
 };
 use sparse_merkle_tree::{traits::Value, H256};
 use std::marker::PhantomData;
+use anyhow::{Error, anyhow};
 
 pub struct ZKStateMachine<V, T, S: StateTransition<V, T>> {
     stf: S,
@@ -45,11 +45,11 @@ impl<
             Ok(true) => (),
             //TODO - Change to invalid proof error
             Ok(false) => {
-                return Err(Error::Unknown);
+                return Err(anyhow!("Invalid merkle proof."));
             }
             Err(e) => {
                 println!("{:?}", e);
-                return Err(Error::Unknown);
+                return Err(anyhow!("Merkle state verification failed."));
             }
         };
 
@@ -91,11 +91,11 @@ impl<
                     "Merkle verification failed. {:?}",
                     &state_update.post_state_root
                 );
-                return Err(Error::Unknown);
+                return Err(anyhow!("Invalid merkle proof."));
             }
             Err(e) => {
                 println!("{:?}", e);
-                return Err(Error::Unknown);
+                return Err(anyhow!("Merkle state verification failed."));
             }
         };
 

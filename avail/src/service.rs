@@ -5,11 +5,13 @@ use avail_subxt::api;
 use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
 use avail_subxt::primitives::AvailExtrinsicParams;
 use avail_subxt::AvailConfig;
+use avail_subxt::config::Header;
 use reqwest::StatusCode;
 use sp_core::crypto::Pair as PairTrait;
 use sp_keyring::sr25519::sr25519::Pair;
 use subxt::tx::PairSigner;
 use subxt::OnlineClient;
+use primitive_types::H256;
 
 
 use crate::avail::AvailBlobTransaction;
@@ -33,6 +35,11 @@ pub struct DaProvider {
     pub light_client_url: String,
     app_id: u32,
     signer: PairSigner<AvailConfig, Pair>,
+}
+
+enum HeightOrHash {
+    Hash([u8; 32]), 
+    Height(u64),
 }
 
 impl DaProvider {
@@ -123,22 +130,31 @@ async fn wait_for_appdata(appdata_url: &str, block: u32) -> anyhow::Result<Extri
 impl DaProvider {
     // Make an RPC call to the node to get the finalized block at the given height, if one exists.
     // If no such block exists, block until one does.
-    pub async fn get_finalized_at(&self, height: u64) -> Result<AvailBlock, anyhow::Error> {
+    async fn get_finalized_at(&self, height_or_hash: HeightOrHash) -> Result<AvailBlock, anyhow::Error> {
         let node_client = self.node_client.clone();
-        let confidence_url = self.confidence_url(height);
-        let appdata_url = self.appdata_url(height);
+        let (header, hash) = match height_or_hash {
+            HeightOrHash::Height(i) => {
+                let hash = node_client
+                .rpc()
+                .block_hash(Some(i.into()))
+                .await?
+                .unwrap();
+    
+                (node_client.rpc().header(Some(hash)).await?.unwrap(), hash)
+            }, 
+            HeightOrHash::Hash(i) => {
+                let hash = H256::from(i);
+
+               (node_client.rpc().header(Some(hash.clone())).await?.unwrap(), hash)
+            }
+        };
+        let height = header.number();
+        let confidence_url = self.confidence_url(height.into());
+        let appdata_url = self.appdata_url(height.into());
 
         wait_for_confidence(&confidence_url).await?;
-        let appdata = wait_for_appdata(&appdata_url, height as u32).await?;
+        let appdata = wait_for_appdata(&appdata_url, height).await?;
         println!("Appdata: {:?}", appdata);
-
-        let hash = node_client
-            .rpc()
-            .block_hash(Some(height.into()))
-            .await?
-            .unwrap();
-
-        let header = node_client.rpc().header(Some(hash)).await?.unwrap();
 
         let header = AvailHeader::new(header, hash);
         let transactions = appdata
@@ -155,29 +171,36 @@ impl DaProvider {
     // Make an RPC call to the node to get the block at the given height
     // If no such block exists, block until one does.
     pub async fn get_block_at(&self, height: u64) -> Result<AvailBlock, anyhow::Error> {
-        self.get_finalized_at(height).await
+        self.get_finalized_at(HeightOrHash::Height(height)).await
     }
 
-    pub async fn send_transaction(&self, blob: &[u8]) -> Result<(), anyhow::Error> {
-    println!("DStarted submissions");
+    pub async fn get_block_with_hash(&self, hash: [u8; 32]) -> Result<AvailBlock, anyhow::Error> {
+        self.get_finalized_at(HeightOrHash::Hash(hash)).await
+    }
 
-      let data_transfer = api::tx()
-      .data_availability()
-      .submit_data(BoundedVec(blob.to_vec()));
-    println!("created extrinsic");
+    pub async fn send_transaction(&self, blob: &[u8]) -> Result<(H256, u32), anyhow::Error> {
+        println!("Started submissions");
 
-      println!("blob {:?}", &blob);
+        let data_transfer = api::tx()
+        .data_availability()
+        .submit_data(BoundedVec(blob.to_vec()));
         
-      let extrinsic_params = AvailExtrinsicParams::new_with_app_id(self.app_id.into());
-      println!("Signing and sending extrinsic to app id signer: {:#?}", &self.signer.account_id());
+        let extrinsic_params = AvailExtrinsicParams::new_with_app_id(self.app_id.into());
 
-      let h = self.node_client
-      .tx()
-      .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
-      .await?;
+        let tx_progress = self.node_client
+        .tx()
+        .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
+        .await?;
 
-      println!("Transaction submitted: {:#?}", h.extrinsic_hash());
+        let (block_hash, index) = tx_progress
+        .wait_for_finalized_success()
+        .await
+        .map(|event| (
+                event.block_hash(),
+                event.extrinsic_index(),
+            )
+        )?;
 
-      Ok(())
+        Ok((block_hash, index))
     }
 }

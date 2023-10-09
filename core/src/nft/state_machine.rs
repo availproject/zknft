@@ -1,6 +1,5 @@
 use crate::traits::StateTransition;
 use crate::{
-    errors::Error,
     nft::state_transition::NftStateTransition,
     nft::types::{Nft, NftTransaction, NftTransactionMessage},
     state::VmState,
@@ -11,6 +10,7 @@ use crate::{
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
+use anyhow::Error;
 
 pub struct NftStateMachine {
     pub state: VmState<Nft>,
@@ -60,6 +60,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
             NftTransactionMessage::Trigger(ref i) => i.id.clone(),
         };
         let nft_key = nft_id.get_key();
+        println!("{:?}", &nft_key);
 
         let nft = match self.state.get(&nft_key) {
             Ok(Some(i)) => i,

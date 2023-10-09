@@ -1,7 +1,7 @@
 use crate::traits::Leaf;
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
-#[cfg(feature = "native")]
-use risc0_zkvm::SessionReceipt;
+#[cfg(any(feature = "native", feature = "native-metal"))]
+use risc0_zkvm::Receipt;
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::{
     traits::{Hasher, Value},
@@ -72,15 +72,22 @@ impl BatchHeader {
     }
 }
 
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "native-metal"))]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct DABatch <T> {
+    pub header: BatchHeader,
+    pub transactions: Vec<T>,
+}
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatchWithProof<T> {
     pub header: BatchHeader,
     pub transaction_with_receipts: Vec<TransactionWithReceipt<T>>,
-    pub proof: SessionReceipt,
+    pub proof: Receipt,
 }
 
-#[cfg(feature = "native")]
+#[cfg(any(feature = "native", feature = "native-metal"))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct TransactionWithReceipt<T> {
     pub transaction: T,
@@ -178,4 +185,27 @@ impl Leaf<H256> for TransactionReceipt {
 pub struct AggregatedBatch {
     pub proof_number: u64,
     pub receipts_root: H256,
+}
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DaTxPointer {
+  pub block_hash: [u8; 32],
+  pub tx_height: u32, 
+  pub chain: AppChain,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum AppChain {
+    Nft,
+    Payments,
+}
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SubmitProofParam {
+    pub session_receipt: Vec<u8>,
+    pub receipts: Vec<TransactionReceipt>,
+    pub chain: AppChain,
+    pub da_tx_pointer: DaTxPointer,
 }

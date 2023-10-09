@@ -1,6 +1,5 @@
 use crate::traits::StateTransition;
 use crate::{
-    errors::Error,
     payments::types::{
         Account, CallType, PaymentReceiptData, Transaction as PaymentsTransaction, TransactionMessage
     },
@@ -9,6 +8,7 @@ use crate::{
 };
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
+use anyhow::{Error, anyhow};
 
 pub struct PaymentsStateTransition {
     chain_id: u64,
@@ -147,7 +147,7 @@ impl StateTransition<Account, PaymentsTransaction> for PaymentsStateTransition {
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
         match params.message.from.verify_msg(&params.signature, &params.message.to_vec(), ) {
             true => (), 
-            false => return Err(Error::StateTransition(String::from("Signature verification."))),
+            false => return Err(anyhow!("Signature verification failed.")),
         }
 
         match params.message.call_type {

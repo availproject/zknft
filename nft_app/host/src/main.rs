@@ -4,12 +4,12 @@ use nft_core::{
         types::{Nft, NftTransaction, NftId},
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeConfig, start_rpc_server, AppChain}
+    app_node::{AppNode, AppNodeConfig, start_rpc_server}, 
+    types::AppChain
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use primitive_types::U256;
 use risc0_zkvm::{
-    default_executor_from_elf,
     serde::{from_slice, to_vec},
     ExecutorEnv,
 };

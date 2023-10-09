@@ -1,10 +1,9 @@
-use crate::errors::{AppError, Error, ProofError};
 use hex;
 use nft_core::traits::Leaf;
 use nft_core::{
     db::NodeDB,
     state::VmState,
-    types::{BatchHeader, TransactionReceipt, BatchWithProof},
+    types::{BatchHeader, TransactionReceipt, BatchWithProof, DABatch},
     nft::types::NftTransaction, 
     payments::types::Transaction as PaymentsTransaction,
 };
@@ -14,6 +13,7 @@ use sparse_merkle_tree::H256;
 use std::thread;
 use std::time::Duration;
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
+use crate::types::{AppChain, DaTxPointer, SubmitProofParam, ReceiptQuery};
 
 //Below imports for HTTP server.
 use actix_web::error;
@@ -22,10 +22,15 @@ use actix_web::HttpResponse;
 use actix_web::{get, web, App, HttpServer, Responder};
 use avail::avail::AvailBlock;
 use avail::service::DaProvider;
+use avail::avail::AvailBlobTransaction;
 use nft_methods::TRANSFER_ID as NFT_ID;
 use payments_methods::TRANSFER_ID as PAYMENTS_ID;
-use risc0_zkvm::{serde::from_slice, SessionReceipt};
+use risc0_zkvm::{serde::from_slice, Receipt};
 use std::sync::{Arc, Mutex};
+use anyhow::Error;
+use anyhow::anyhow;
+
+const AGGREGATE_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub struct NexusApp {
@@ -41,8 +46,8 @@ pub struct AppState {
     pub last_aggregated_batch: AggregatedBatch,
     pub last_aggregated_nft_batch: BatchHeader,
     pub last_aggregated_payments_batch: BatchHeader,
-    pub verified_nft_batches: OrderedBatches,
-    pub verified_payments_batches: OrderedBatches,
+    pub verified_nft_batches: Vec<BatchWithReceipts>,
+    pub verified_payments_batches: Vec<BatchWithReceipts>,
 }
 
 impl AppState {
@@ -55,13 +60,13 @@ impl AppState {
             last_aggregated_batch,
             last_aggregated_nft_batch,
             last_aggregated_payments_batch,
-            verified_nft_batches: OrderedBatches::new(),
-            verified_payments_batches: OrderedBatches::new(),
+            verified_nft_batches: vec![],
+            verified_payments_batches: vec![],
         }
     }
 
     pub fn get_last_nft_verified_batch(&self) -> BatchHeader {
-        if self.verified_nft_batches.proof_count() == 0 {
+        if self.verified_nft_batches.len() == 0 {
             self.last_aggregated_nft_batch.clone()
         } else {
             match self.verified_nft_batches.last() {
@@ -72,7 +77,7 @@ impl AppState {
     }
 
     pub fn get_last_payments_verified_batch(&self) -> BatchHeader {
-        if self.verified_payments_batches.proof_count() == 0 {
+        if self.verified_payments_batches.len() == 0 {
             self.last_aggregated_payments_batch.clone()
         } else {
             match self.verified_payments_batches.last() {
@@ -119,6 +124,12 @@ impl OrderedBatches {
         }
     }
 
+    pub fn clear(&mut self) -> () {
+        if !self.0.is_empty() {
+            self.0.clear();
+        }
+    }
+
     pub fn proof_count(&self) -> usize {
         self.0.len()
     }
@@ -144,144 +155,32 @@ impl NexusApp {
     }
 
     pub async fn start(&mut self) -> () {
-        let da_last_height = {
-            let mut db = self.db.lock().unwrap();
-            match db.get::<u64>(b"last_da_block") {
-                Ok(Some(i)) => i,
-                Ok(None) => self.da_start_height,
-                Err(e) => panic!("Could not start node. {:?}", e),
-            }
-        };
-
-        self.da_start_height = da_last_height;
-
         loop {
-            let filtered_nft_da_block = match self
-                .nft_da_service
-                .get_finalized_at(self.da_start_height)
-                .await
-            {
-                Ok(i) => i,
-                Err(e) => {
-                    println!(
-                        "Error fetching data at height {}: {:?}",
-                        self.da_start_height, e
-                    );
-                    continue; // Retry the same height on error
-                }
-            };
+            self.aggregate_proofs();
 
-            let filtered_payments_da_block = match self
-                .payments_da_service
-                .get_finalized_at(self.da_start_height)
-                .await
-            {
-                Ok(i) => i,
-                Err(e) => {
-                    println!(
-                        "Error fetching data at height {}: {:?}",
-                        self.da_start_height, e
-                    );
-                    continue; // Retry the same height on error
-                }
-            };
-
-            if filtered_nft_da_block.transactions.len() > 0
-                || filtered_payments_da_block.transactions.len() > 0
-            {
-                println!("Found tx blobs, aggregating batch.");
-                // TODO: Check for errors
-                self.verify_and_update_proofs(filtered_nft_da_block, filtered_payments_da_block);
-            } else {
-                println!("Empty txs in block number: {}", self.da_start_height);
-            }
-
-            // Move to the next height for the next iteration
-            self.da_start_height += 1;
-
-            let mut db = self.db.lock().unwrap();
-            match db.put::<u64>(b"last_da_block", &self.da_start_height) {
-                Ok(()) => (),
-                Err(e) => println!("Warning: Could not save last processed block. error: {:?}", e),
-            }
+            tokio::time::sleep(AGGREGATE_INTERVAL).await;
         }
     }
 
-    fn verify_and_update_proofs(
+    fn aggregate_proofs(
         &mut self,
-        filtered_nft_da_block: AvailBlock,
-        filtered_payments_da_block: AvailBlock,
     ) -> () {
-        let pending_nft_batch_count = filtered_nft_da_block.transactions.len();
-        let pending_payments_batch_count = filtered_payments_da_block.transactions.len();
-        println!(
-            "aggregating proofs: {:?}, {:?}",
-            pending_nft_batch_count, pending_payments_batch_count
-        );
-        let mut receipts_to_add: Vec<TransactionReceipt> = vec![];
-
-        for height in 0..pending_nft_batch_count {
-            println!("Decoding next batch.");
-            let next_batch = match bincode::deserialize::<BatchWithProof<NftTransaction>>(
-                filtered_nft_da_block.transactions[height].blob(),
-            ) {
-                Ok(i) => i,
-                //Ignoring tx blob if deserialisation failed.
-                Err(e) => continue,
-            };
-            println!("Decoded");
-            let mut tx_receipts: Vec<TransactionReceipt> = vec![];
-            for tx in &next_batch.transaction_with_receipts {
-                tx_receipts.push(tx.receipt.clone());
-            }
-            println!("Verifying nft batch.");
-            match self.verify_nft_batch(next_batch.proof, tx_receipts.clone()) {
-                Ok(i) => i,
-                //TODO: Log rejected batches.
-                Err(e) => continue,
-            }
-            println!("Add receipts.");
-            receipts_to_add.extend(tx_receipts);
-
-            if height == pending_nft_batch_count - 1 {
-                let mut app_state = self.app_state.lock().unwrap();
-                //TODO: Below should not be changed before final aggregation.
-                app_state.last_aggregated_nft_batch = next_batch.header.clone();
-            }
-        }
-
-        for height in 0..pending_payments_batch_count {
-            let next_batch = match bincode::deserialize::<BatchWithProof<PaymentsTransaction>>(
-                filtered_payments_da_block.transactions[height].blob(),
-            ) {
-                Ok(i) => i,
-                //Ignoring tx blob if deserialisation failed.
-                Err(e) => continue,
-            };
-
-            let mut tx_receipts: Vec<TransactionReceipt> = vec![];
-            for tx in &next_batch.transaction_with_receipts {
-                tx_receipts.push(tx.receipt.clone());
-            }
-
-            match self.verify_payments_batch(next_batch.proof, tx_receipts.clone()) {
-                Ok(i) => i,
-                //TODO: Log rejected batches.
-                Err(e) => continue,
-            }
-
-            receipts_to_add.extend(tx_receipts);
-
-            if height == pending_payments_batch_count - 1 {
-                let mut app_state = self.app_state.lock().unwrap();
-                //TODO: Below should not be changed before final aggregation.
-                app_state.last_aggregated_payments_batch = next_batch.header.clone();
-            }
-        }
-
         let mut app_state = self.app_state.lock().unwrap();
         let mut tree_state = self.tree_state.lock().unwrap();
         let mut db = self.db.lock().unwrap();
+        println!(
+            "aggregating proofs: {:?}, {:?}",
+            app_state.verified_payments_batches.len(), app_state.verified_payments_batches.len()
+        );
+        let mut receipts_to_add: Vec<TransactionReceipt> = vec![];
+
+        for batch in &app_state.verified_nft_batches {
+            receipts_to_add.extend(batch.receipts.clone());
+        }
+
+        for batch in &app_state.verified_payments_batches {
+            receipts_to_add.extend(batch.receipts.clone());
+        }
 
         if receipts_to_add.len() > 0 {
             let state_update = match tree_state.update_set(receipts_to_add) {
@@ -324,44 +223,100 @@ impl NexusApp {
                 Err(e) => panic!("Could not start node. {:?}", e),
             }
         }
+
+        app_state.verified_nft_batches.clear();
+        app_state.verified_payments_batches.clear();
+    }
+
+    async fn get_da_tx(
+        &self, 
+        pointer: DaTxPointer,
+    ) -> Result<AvailBlobTransaction, Error> {
+        let da_service = match pointer.chain {
+            AppChain::Nft => &self.nft_da_service, 
+            AppChain::Payments => &self.payments_da_service
+        };
+
+        let block = match da_service
+                .get_block_with_hash(pointer.block_hash)
+                .await
+            {
+                Ok(i) => i,
+                Err(e) => {
+                    return Err(
+                        anyhow!("Error fetching data {:?}",e)
+                    ); // Retry the same height on error
+                }
+            };
+        let height = pointer.tx_height - 1;
+
+        println!("Da Height: {}", height);
+
+        Ok(block.transactions[height].clone())
+    }
+
+    pub async fn submit_batch(&self, param: SubmitProofParam) -> Result<(), Error> {
+        let tx = self.get_da_tx(param.da_tx_pointer.clone()).await?;
+        let blob = tx.blob();
+
+        //TODO: Check if all transactions are available and complete.
+
+        match param.chain {
+            AppChain::Nft => self.verify_nft_batch(param, blob),
+            AppChain::Payments => self.verify_payments_batch(param, blob),
+        }
     }
 
     pub fn verify_nft_batch(
         &self,
-        receipt: SessionReceipt,
-        tx_receipts: Vec<TransactionReceipt>,
+        param: SubmitProofParam,
+        blob: &[u8],
     ) -> Result<(), Error> {
         let mut app_state = self.app_state.lock().unwrap();
+        let da_batch: DABatch<NftTransaction> = match bincode::deserialize(blob) {
+            Ok(i) => i, 
+            Err(e) => return Err(anyhow!("Da batch deserialization failed due to error: {:?}", e))
+        };
+        let session_receipt: Receipt = match bincode::deserialize(&param.session_receipt) {
+            Ok(i) => i,  
+            Err(e) => return Err(anyhow!("proof deserialization failed due to error: {:?}", e))
+        };
+
+        // if da_batch.header != batch.header {
+        //     return Err(anyhow!("Provided batch header does not match header posted to DA."));
+        // }
+
+        //TODO: Da validity check.
+
         println!("verifying NFT batch.");
-        match receipt.verify(NFT_ID) {
-            Ok(i) => Ok::<(), ProofError>(()),
+        match session_receipt.verify(NFT_ID) {
+            Ok(i) => Ok::<(), Error>(()),
             //TODO: Simplify this chaining.
             Err(e) => {
-                return Err(Error::ProofError(ProofError(String::from(
-                    "Unable to verify proof",
-                ))))
+                return Err(anyhow!("Unable to verify proof."))
             }
         };
 
         println!("Verified NFT batch. Will be aggregated in the next cycle.");
-        let batch_header: BatchHeader = from_slice(&receipt.journal).unwrap();
+        //Doing it this way to compare public parameters to submitted batch.
+        let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
         let last_batch_header: BatchHeader = app_state.get_last_nft_verified_batch();
         //TODO: change this to calculate root of all receipts, currently we assume
-        //there is only one receipt per batch.
-        let receipts_root: H256 = tx_receipts[0].to_h256();
+        //there is only one receipt; per batch.
+        let receipts_root: H256 = param.receipts[0].to_h256();
 
         //TODO: Seperate the check for better error response.
         if receipts_root == batch_header.receipts_root
             && last_batch_header.state_root == batch_header.pre_state_root
         {
-            app_state.verified_nft_batches.add_batch(BatchWithReceipts {
+            app_state.verified_nft_batches.push(BatchWithReceipts {
                 header: batch_header,
-                receipts: tx_receipts,
+                receipts: param.receipts,
             });
 
             println!(
                 "Added nft batch, total count: {:?}",
-                app_state.verified_nft_batches.proof_count()
+                app_state.verified_nft_batches.len()
             );
 
             Ok(())
@@ -374,33 +329,41 @@ impl NexusApp {
                 "pre_state root: {:?} {:?}",
                 &last_batch_header.state_root, &batch_header.pre_state_root
             );
-            Err(Error::ProofError(ProofError(String::from("Invalid proof"))))
+            Err(anyhow!("Invalid proof."))
         }
     }
 
     pub fn verify_payments_batch(
         &self,
-        receipt: SessionReceipt,
-        tx_receipts: Vec<TransactionReceipt>,
+        param: SubmitProofParam,
+        blob: &[u8],
     ) -> Result<(), Error> {
         let mut app_state = self.app_state.lock().unwrap();
-        println!("Verifying payments batch");
+        let session_receipt: Receipt = match bincode::deserialize(&param.session_receipt) {
+            Ok(i) => i, 
+            Err(e) => return Err(anyhow!("proof deserialization failed due to error: {:?}", e))
+        };
+        let da_batch: DABatch<PaymentsTransaction> = match bincode::deserialize(blob) {
+            Ok(i) => i, 
+            Err(e) => return Err(anyhow!("Da batch deserialization failed due to error: {:?}", e))
+        };
+        
+        //TODO: Da validity check.
 
-        match receipt.verify(PAYMENTS_ID) {
-            Ok(i) => Ok::<(), ProofError>(()),
+        println!("verifying payments batch.");
+        match session_receipt.verify(PAYMENTS_ID) {
+            Ok(i) => Ok::<(), Error>(()),
             //TODO: Simplify this chaining.
             Err(e) => {
-                return Err(Error::ProofError(ProofError(String::from(
-                    "Unable to verify proof",
-                ))))
+                return Err(anyhow!("Unable to verify proof."))
             }
         };
 
-        let batch_header: BatchHeader = from_slice(&receipt.journal).unwrap();
+        let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
         let last_batch_header: BatchHeader = app_state.get_last_payments_verified_batch();
         //TODO: change this to calculate root of all receipts, currently we assume
         //there is only one receipt per batch.
-        let receipts_root: H256 = tx_receipts[0].to_h256();
+        let receipts_root: H256 = param.receipts[0].to_h256();
 
         //TODO: Seperate the check for better error response.
         if receipts_root == batch_header.receipts_root
@@ -408,35 +371,18 @@ impl NexusApp {
         {
             app_state
                 .verified_payments_batches
-                .add_batch(BatchWithReceipts {
+                .push(BatchWithReceipts {
                     header: batch_header,
-                    receipts: tx_receipts,
+                    receipts: param.receipts,
                 });
 
             println!("Verified and added payments batch. Will be aggregated in the next cycle.");
 
             Ok(())
         } else {
-            Err(Error::ProofError(ProofError(String::from("Invalid proof"))))
+            Err(anyhow!("Invalid proof."))
         }
     }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub enum AppChain {
-    Nft,
-    Payments,
-}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SubmitProofParam {
-    session_receipt: SessionReceipt,
-    receipts: Vec<TransactionReceipt>,
-    chain: AppChain,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
-pub struct ReceiptQuery {
-    key: String,
 }
 
 async fn submit_batch(
@@ -444,31 +390,10 @@ async fn submit_batch(
     call: web::Json<SubmitProofParam>,
 ) -> impl Responder {
     let deserialized_call: SubmitProofParam = call.into_inner();
-    //let mut app = service.lock().unwrap();
-
-    println!(
-        "Received request to verify and add batch for chain: {}",
-        match deserialized_call.chain {
-            AppChain::Nft => "NFT Chain",
-            AppChain::Payments => "Payments Chain",
-        }
-    );
-
-    match deserialized_call.chain {
-        AppChain::Nft => match service.verify_nft_batch(
-            deserialized_call.session_receipt,
-            deserialized_call.receipts,
-        ) {
-            Ok(()) => "Proof Submitted",
-            Err(e) => "Proof not submitted",
-        },
-        AppChain::Payments => match service.verify_payments_batch(
-            deserialized_call.session_receipt,
-            deserialized_call.receipts,
-        ) {
-            Ok(()) => "Proof Submitted",
-            Err(e) => "Proof not submitted",
-        },
+    
+    match service.submit_batch(deserialized_call).await {
+        Ok(()) => "Proof verified and submitted successfully.", 
+        Err(e) => "Proof submission failed."
     }
 }
 
@@ -511,9 +436,14 @@ async fn get_current_batch(service: web::Data<NexusApp>) -> impl Responder {
 }
 
 pub async fn start_rpc_server(shared_service: NexusApp) -> impl Send {
+    let json_cfg = web::JsonConfig::default()
+    // limit request payload size
+    .limit(1800000000);
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(shared_service.clone()))
+            .app_data(json_cfg.clone())
             .route("/submit-batch", web::post().to(submit_batch))
             .route("/current-batch", web::get().to(get_current_batch))
             .route("/receipt", web::get().to(get_receipt_with_proof))

@@ -1,11 +1,11 @@
-#[cfg(feature = "native")]
+#[cfg(not(feature = "verifier"))]
 use avail_subxt::api::runtime_types::{
     da_control::pallet::Call, da_runtime::RuntimeCall::DataAvailability,
 };
 use avail_subxt::primitives::AppUncheckedExtrinsic;
 use avail_subxt::primitives::Header as SubxtHeader;
 
-#[cfg(feature = "native")]
+#[cfg(not(feature = "verifier"))]
 use codec::Encode;
 use core::fmt::{Display, Formatter};
 use primitive_types::H256;

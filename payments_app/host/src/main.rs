@@ -9,7 +9,6 @@ use nft_core::{
 use payments_methods::{TRANSFER_ELF, TRANSFER_ID};
 use primitive_types::U256;
 use risc0_zkvm::{
-    default_executor_from_elf,
     serde::{from_slice, to_vec},
     ExecutorEnv,
 };

@@ -1,10 +1,10 @@
 use crate::{
-    errors::Error,
     types::{AggregatedBatch, StateUpdate, TransactionReceipt},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
+use anyhow::Error;
 
 pub trait Leaf<K> {
     fn get_key(&self) -> K;

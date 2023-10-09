@@ -1,5 +1,4 @@
 use crate::{
-    errors::Error,
     payments::state_transition::PaymentsStateTransition,
     payments::types::{
         Account, Transaction as PaymentsTransaction,
@@ -12,6 +11,7 @@ use crate::{
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
+use anyhow::Error;
 
 pub struct PaymentsStateMachine {
     pub state: VmState<Account>,

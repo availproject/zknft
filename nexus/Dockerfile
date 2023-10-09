@@ -27,7 +27,8 @@ RUN curl -L https://raw.githubusercontent.com/availproject/availproject.github.i
     tar -xf avail-light-linux-amd64.tar.gz && \
     echo "app_id = ${APP_ID}" >> config.yaml && \
     sed -i "s#full_node_ws = .*#full_node_ws = ['$NODE_CLIENT_URL']#" config.yaml && \
-    sed -i "s#http_server_host = .*#http_server_host = '0.0.0.0'#" config.yaml
+    sed -i "s#http_server_host = .*#http_server_host = '0.0.0.0'#" config.yaml && \
+    echo "sync_start_block = 487318" >> config.yaml
 
 ENV APP_ID=0
 

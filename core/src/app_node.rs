@@ -1,23 +1,25 @@
 use crate::db::NodeDB;
-use crate::errors::Error;
-
 use crate::traits::StateMachine;
 use crate::traits::TxHasher;
 use crate::types::AggregatedBatch;
-use crate::types::BatchWithProof;
+use crate::types::DABatch;
 use crate::types::BatchHeader;
 use crate::types::TransactionReceipt;
 use crate::types::TransactionWithReceipt;
+use crate::types::BatchWithProof;
+use crate::types::{DaTxPointer, SubmitProofParam, AppChain};
 use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
 
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
-    default_executor_from_elf,
     serde::{from_slice, to_vec},
-    ExecutorEnv, SessionReceipt,
+    ExecutorEnv, 
+    Receipt,
+    Executor, 
+    recursion::SuccinctReceipt
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
+use anyhow::{Error, anyhow};
 
 use std::io::Write;
 use sparse_merkle_tree::traits::Value;
@@ -33,6 +35,8 @@ use flate2::write::ZlibEncoder;
 
 //Below imports for HTTP server.
 
+const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
+const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
 
 use actix_web::HttpResponse;
 use actix_web::{web, App, HttpServer, Responder};
@@ -187,7 +191,6 @@ impl<
     }
 
     pub async fn execute_batch(&self, call_params: T) -> Result<(), Error> {
-        let nexus_url = "http://127.0.0.1:8080/current-batch";
         let _now = SystemTime::now();
         let last_batch_number: u64 = {
             let db = self.db.lock().await;
@@ -201,7 +204,7 @@ impl<
         //TODO: Add proper error handling below by removing unwrap and store last
         //batch in memory.
         let aggregated_proof: AggregatedBatch =
-            reqwest::get(nexus_url).await.unwrap().json().await.unwrap();
+            reqwest::get(NEXUS_LATEST_BATCH_URL).await.unwrap().json().await.unwrap();
 
         let mut state_machine = self.state_machine.lock().await;
 
@@ -217,7 +220,7 @@ impl<
 
         //Note: Have to do this weird construction as tokio spawn complains that 
         //env is not dropped before an async operation below so is not thread safe.
-        let serialized = {
+        let (batch, proof) = {
             let mut exec = {
                 let env = ExecutorEnv::builder()
                     .add_input(&to_vec(&call_params).unwrap())
@@ -227,8 +230,7 @@ impl<
                     .build()
                     .unwrap();
 
-                    // Next, we make an executor, loading the (renamed) ELF binary.
-                    default_executor_from_elf(env, &self.zkvm_elf).unwrap()
+                    Executor::from_elf(env, &self.zkvm_elf).unwrap()
             };
 
             // Run the executor to produce a session.
@@ -240,10 +242,13 @@ impl<
                 .fold(0, |acc, segment| acc + (1 << segment.po2));
 
             println!("Executed, cycles: {}k", cycles / 1024);
-            let session_receipt = session.prove().unwrap();
+            let session_receipt = match session.prove() {
+                Ok(i) => i, 
+                Err(e) => {panic!("{:?}", e);}
+            };
 
-                println!("Session executed in zkvm with ID {:?}", &self.zkvm_id);
-                session_receipt.verify(self.zkvm_id).unwrap();
+            println!("Session executed in zkvm with ID {:?}", &self.zkvm_id);
+            session_receipt.verify(self.zkvm_id).unwrap();
             
             //TODO: Might not need to be deserialized, and need to remove unwrap.
             let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
@@ -252,64 +257,102 @@ impl<
                 receipt: receipt.clone(),
             };
 
-            bincode::serialize(&BatchWithProof {
+            (
+                DABatch {
                 header: batch_header,
-                proof: session_receipt,
-                transaction_with_receipts: vec![transaction_with_receipt],
-            })
-            .unwrap()
+                transactions: vec![call_params.clone()],
+                }, 
+                session_receipt
+            )
         };
 
+        let serialized = bincode::serialize(&batch).unwrap();
         
-        let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-        e.write_all(&serialized);
-        let compressed_bytes = e.finish().unwrap();
+        println!("Non compressed length: {},", serialized.len());
 
-        println!("Compressed length: {}", compressed_bytes.len());
-        match self.da_service.send_transaction(&serialized).await {
-            Ok(_i) => (), 
+        let (block_hash, index) = match self.da_service.send_transaction(&serialized).await {
+            Ok(i) => {
+                println!("{:?}", i); 
+            i}, 
             //Change from default error.
             Err(e) => {
                 println!("error {:?}", e);
-                return Err(Error::default())
+                return Err(anyhow!("DA data submit tx failed. {:?}", e.to_string()))
             },
         };
 
-        //Add batch header.
-        let db = self.db.lock().await;
-
-        match &db.put(
-            b"last_batch_header",
-            &BatchHeader {
-                pre_state_root: state_update.pre_state_root,
-                state_root: state_update.post_state_root,
-                //TODO: Change both below to hash list of transactions and
-                //not single one.
-                transactions_root: call_params.to_h256(),
-                receipts_root: receipt.to_h256(),
-                batch_number: last_batch_number + 1,
-            },
-        ) {
-            Ok(()) => (),
-            Err(e) => {
-                println!("error {:?}", e);
-                return Err(e.clone())
-            },
-        };
-
-        let transaction_with_receipt = TransactionWithReceipt {
+        let transaction_with_receipts = vec![TransactionWithReceipt {
             transaction: call_params.clone(),
             receipt: receipt.clone(),
+        }];
+
+        let serialized_receipt = match bincode::serialize(&proof) {
+            Ok(i) => i, 
+            Err(e) => { return Err(anyhow!("Proof serialization failed."))}
         };
-        
-        //TODO: Add tx list. For now only one transaction.
-        match &db.put(
-            call_params.to_h256().as_slice(),
-            &transaction_with_receipt,
-        ) {
-            Ok(()) => (),
-            Err(e) => return Err(e.clone()),
+
+        let data = SubmitProofParam {
+            session_receipt: serialized_receipt, 
+            receipts: vec![receipt.clone()], 
+            chain: self.chain.clone(), 
+            da_tx_pointer: DaTxPointer {
+                block_hash: block_hash.to_fixed_bytes(),
+                tx_height: index,
+                chain: self.chain.clone()
+            },
+        };
+
+        let client = reqwest::Client::new();
+        let response = match client
+        .post(NEXUS_SUBMIT_BATCH_URL)
+        .json(&data) // Serialize the data as JSON
+        .send()
+        .await {
+            Ok(i) => i, 
+            Err(e) => { return Err(anyhow!("Batch submission failed. {:?}", e.to_string()))}
+        };
+
+        //TODO: Need to reload previous state if call failed.
+        match response.status().as_u16() {
+            200 => {
+                // Request was successful, handle the response here
+                let response_text = response.text().await?;
+                println!("Request successful. Response: {}", response_text);
+            }
+            _ => {
+                // Request failed
+                println!("Request failed with status code: {}", response.status());
+
+                return Err(anyhow!("Submit batch failed, will try to execute again."));
+            }
         }
+
+        self.save_batch(BatchWithProof {
+            header: batch.header, 
+            transaction_with_receipts, 
+            proof
+        }).await
+    }
+
+    pub async fn save_batch(&self, batch_with_proof: BatchWithProof<T>) ->  Result<(), Error> {
+        let db = self.db.lock().await;
+
+        for tx in batch_with_proof.transaction_with_receipts {
+            db.put(
+                tx.transaction.to_h256().as_slice(),
+                &tx,
+            )?;
+        }
+
+        db.put(
+            b"last_batch_header",
+            &batch_with_proof.header,
+        )?;
+
+        db.put(
+            &batch_with_proof.header.batch_number.to_be_bytes(),
+            &batch_with_proof.header,
+        )?;
 
         Ok(())
     }
@@ -387,7 +430,7 @@ where
     S: StateMachine<V, T> + std::marker::Send + 'static,
 {
     let shared_service = Arc::new(Mutex::new(singleton));
-
+    println!("Starting rpc server");
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(shared_service.clone()))
@@ -398,17 +441,4 @@ where
     .unwrap()
     .run()
     .await;
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub enum AppChain {
-    Nft,
-    Payments,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SubmitProofParam {
-    session_receipt: SessionReceipt,
-    receipts: Vec<TransactionReceipt>,
-    chain: AppChain,
 }

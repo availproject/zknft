@@ -1,8 +1,8 @@
-use crate::errors::{DBError, Error};
 use rocksdb::{Options, DB};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{from_slice, to_vec};
 use sparse_merkle_tree::H256;
+use anyhow::{Error, anyhow};
 
 //Wrapper class to RocksDB which is used as backing storage.
 pub struct NodeDB {
@@ -29,7 +29,7 @@ impl NodeDB {
 
     pub fn get<V: DeserializeOwned>(&self, serialized_key: &[u8]) -> Result<Option<V>, Error> {
         match self.db.get(serialized_key) {
-            Err(e) => Err(Error::DBError(DBError(e.to_string()))),
+            Err(e) => Err(anyhow!("{}", e.to_string())),
             Ok(None) => Ok(None),
             Ok(Some(i)) => Ok(from_slice(&i).unwrap()),
         }
@@ -37,16 +37,16 @@ impl NodeDB {
 
     pub fn put<V: Serialize>(&self, serialized_key: &[u8], value: &V) -> Result<(), Error> {
         match self.db.put(serialized_key, to_vec(&value).unwrap()) {
-            Err(e) => Err(Error::DBError(DBError(e.to_string()))),
+            Err(e) => Err(anyhow!("{}", e.to_string())),
             _ => Ok(()),
         }
     }
 
     pub fn delete(&self, serialized_key: &[u8]) -> Result<(), Error> {
         match self.db.get(serialized_key) {
-            Err(e) => Err(Error::DBError(DBError(e.to_string()))),
+            Err(e) => Err(anyhow!("{}", e.to_string())),
             Ok(Some(_)) => match self.db.delete(serialized_key) {
-                Err(e) => Err(Error::DBError(DBError(e.to_string()))),
+                Err(e) => Err(anyhow!("{}", e.to_string())),
                 _ => Ok(()),
             },
             Ok(None) => Ok(()),

@@ -1,6 +1,6 @@
 pub mod avail;
 
-#[cfg(feature = "native")]
+#[cfg(not(feature = "verifier"))]
 pub mod service;
 // pub mod spec;
 

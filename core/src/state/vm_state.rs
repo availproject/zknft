@@ -1,5 +1,4 @@
 use crate::{
-    errors::{Error, StateError},
     state::MerkleStore,
     traits::Leaf,
     types::StateUpdate,
@@ -12,6 +11,7 @@ use sparse_merkle_tree::{
     MerkleProof, SparseMerkleTree, H256,
 };
 use std::cmp::PartialEq;
+use anyhow::{Error, anyhow};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -101,19 +101,19 @@ impl<
                     Ok(Some(i))
                 }
             }
-            Err(_e) => Err(Error::StateError(StateError::ErroneousState)),
+            Err(_e) => Err(anyhow!("Erroneous state.")),
         }
     }
 
     pub fn get_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error> {
         let value = match self.tree.get(key) {
             Ok(i) => i,
-            Err(_e) => return Err(Error::StateError(StateError::ErroneousState)),
+            Err(_e) => return Err(anyhow!("Erroneous state.")),
         };
 
         let proof = match self.tree.merkle_proof(vec![*key]) {
             Ok(i) => i,
-            Err(_e) => return Err(Error::StateError(StateError::ErroneousState)),
+            Err(_e) => return Err(anyhow!("Erroneous state.")),
         };
 
         Ok((value, proof))

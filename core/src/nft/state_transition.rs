@@ -1,5 +1,4 @@
 use crate::{
-    errors::Error,
     nft::types::{
         Burn, Future, FutureReceiptData, Mint, Nft, NftTransaction, NftTransactionMessage, Transfer, TransferReceiptData,
         Trigger
@@ -9,6 +8,7 @@ use crate::{
 };
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
+use anyhow::{Error, anyhow};
 
 use sha2::Digest;
 
@@ -82,7 +82,7 @@ impl NftStateTransition {
 
     fn mint(&self, params: Mint, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state != Nft::zero() {
-            panic!("Already minted");
+            panic!("Already minted, {:?}", pre_state);
         }
 
         match params.future_commitment {
@@ -275,7 +275,7 @@ impl StateTransition<Nft, NftTransaction> for NftStateTransition {
             NftTransactionMessage::Trigger(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
         } } {
             true => (),
-            false => return Err(Error::StateTransition(String::from("Signature verification."))),
+            false => return Err(anyhow!("Signature verification failed.")),
         };
 
         match params.message {
