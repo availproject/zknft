@@ -270,7 +270,7 @@ impl<
         
         println!("Non compressed length: {},", serialized.len());
 
-        let (block_hash, index) = match self.da_service.send_transaction(&serialized).await {
+        let (block_hash, hash) = match self.da_service.send_transaction(&serialized).await {
             Ok(i) => {
                 println!("{:?}", i); 
             i}, 
@@ -297,7 +297,7 @@ impl<
             chain: self.chain.clone(), 
             da_tx_pointer: DaTxPointer {
                 block_hash: block_hash.to_fixed_bytes(),
-                tx_height: index,
+                hash: hash.to_fixed_bytes(),
                 chain: self.chain.clone()
             },
         };

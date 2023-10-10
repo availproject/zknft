@@ -191,7 +191,7 @@ pub struct AggregatedBatch {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DaTxPointer {
   pub block_hash: [u8; 32],
-  pub tx_height: u32, 
+  pub hash: [u8; 32], 
   pub chain: AppChain,
 }
 

@@ -166,12 +166,22 @@ pub struct AvailBlock {
 }
 
 impl AvailBlock {
-    fn hash(&self) -> H256 {
+    pub fn hash(&self) -> H256 {
         self.header.hash()
     }
 
-    fn header(&self) -> &AvailHeader {
+    pub fn header(&self) -> &AvailHeader {
         &self.header
+    }
+
+    pub fn find_tx(&self, hash: &H256) -> Option<AvailBlobTransaction> {
+        for transaction in &self.transactions {
+            if transaction.hash == hash.clone() {
+                return Some(transaction.clone());
+            }
+        }
+
+        None
     }
 
     // Below not required at the moment.

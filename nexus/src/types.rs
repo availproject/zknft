@@ -5,7 +5,7 @@ use nft_core::types::TransactionReceipt;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DaTxPointer {
   pub block_hash: [u8; 32],
-  pub tx_height: usize, 
+  pub hash: [u8; 32], 
   pub chain: AppChain,
 }
 

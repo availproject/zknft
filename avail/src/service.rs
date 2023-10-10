@@ -178,7 +178,7 @@ impl DaProvider {
         self.get_finalized_at(HeightOrHash::Hash(hash)).await
     }
 
-    pub async fn send_transaction(&self, blob: &[u8]) -> Result<(H256, u32), anyhow::Error> {
+    pub async fn send_transaction(&self, blob: &[u8]) -> Result<(H256, H256), anyhow::Error> {
         println!("Started submissions");
 
         let data_transfer = api::tx()
@@ -197,7 +197,7 @@ impl DaProvider {
         .await
         .map(|event| (
                 event.block_hash(),
-                event.extrinsic_index(),
+                event.extrinsic_hash(),
             )
         )?;
 

@@ -10,6 +10,7 @@ use nft_core::{
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
+use primitive_types::H256 as SubstrateH256;
 use std::thread;
 use std::time::Duration;
 use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
@@ -248,11 +249,14 @@ impl NexusApp {
                     ); // Retry the same height on error
                 }
             };
-        let height = pointer.tx_height - 1;
+        let hash = SubstrateH256::from(pointer.hash);
 
-        println!("Da Height: {}", height);
+        println!("Da hash: {:?}", hash);
 
-        Ok(block.transactions[height].clone())
+        match block.find_tx(&hash) {
+            Some(i) => Ok(i),
+            None => Err(anyhow!("DA Transaction not found in block."))
+        }
     }
 
     pub async fn submit_batch(&self, param: SubmitProofParam) -> Result<(), Error> {
