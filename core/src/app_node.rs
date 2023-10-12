@@ -4,7 +4,7 @@ use crate::traits::TxHasher;
 use crate::types::AggregatedBatch;
 use crate::types::DABatch;
 use crate::types::BatchHeader;
-use crate::types::TransactionReceipt;
+
 use crate::types::TransactionWithReceipt;
 use crate::types::BatchWithProof;
 use crate::types::RPCMethod;
@@ -14,26 +14,24 @@ use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
     serde::{from_slice, to_vec},
-    ExecutorEnv, 
-    Receipt,
-    Executor, 
-    recursion::SuccinctReceipt
+    ExecutorEnv,
+    Executor
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use anyhow::{Error, anyhow};
 
-use std::io::Write;
+
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 use std::time::Duration;
-use core::ops::Fn;
+
 
 use std::io::prelude::*;
-use flate2::Compression;
-use flate2::write::ZlibEncoder;
+
+
 
 //Below imports for HTTP server.
 
@@ -41,7 +39,7 @@ const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
 const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
 
 use actix_web::HttpResponse;
-use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler, Route};
+use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler};
 use reqwest;
 
 use std::sync::Arc;
@@ -254,7 +252,7 @@ impl<
             
             //TODO: Might not need to be deserialized, and need to remove unwrap.
             let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
-            let transaction_with_receipt = TransactionWithReceipt {
+            let _transaction_with_receipt = TransactionWithReceipt {
                 transaction: call_params.clone(),
                 receipt: receipt.clone(),
             };
@@ -290,7 +288,7 @@ impl<
 
         let serialized_receipt = match bincode::serialize(&proof) {
             Ok(i) => i, 
-            Err(e) => { return Err(anyhow!("Proof serialization failed."))}
+            Err(_e) => { return Err(anyhow!("Proof serialization failed."))}
         };
 
         let data = SubmitProofParam {
@@ -485,7 +483,7 @@ impl<
     //     }
     // }
 
-    pub async fn run<F, Args>(&self, rpc_methods: Vec<RPCMethod<F, Args>>) -> () 
+    pub async fn run<F, Args>(&self, rpc_methods: Vec<RPCMethod<F, Args>>) 
     where  
     F: Handler<Args> + std::marker::Send + Clone + std::marker::Sync,
     Args: FromRequest + 'static + std::marker::Send + std::marker::Sync,

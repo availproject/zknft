@@ -1,4 +1,4 @@
-use risc0_zkvm::Receipt;
+
 use serde::{Deserialize, Serialize};
 use nft_core::types::TransactionReceipt;
 

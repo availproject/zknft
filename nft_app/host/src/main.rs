@@ -1,30 +1,24 @@
 use nft_core::{
     nft::{
         state_machine::NftStateMachine,
-        types::{Nft, NftTransaction, NftId},
+        types::{Nft, NftTransaction},
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeConfig, start_rpc_server, RPCServer, api_handler}, 
+    app_node::{AppNode, AppNodeConfig, RPCServer, api_handler}, 
     types::{AppChain, RPCMethod}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
-use primitive_types::U256;
-use risc0_zkvm::{
-    serde::{from_slice, to_vec},
-    ExecutorEnv,
-};
-use serde::ser::Serialize;
-use sparse_merkle_tree::{
-    default_store::DefaultStore, error::Error, traits::Hasher, traits::Value, MerkleProof,
-    SparseMerkleTree, H256,
-};
-use std::time::SystemTime;
+
+
+
+
+
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 fn main() {
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    let mut app = rt.block_on(async move {AppNode::<Nft, NftTransaction, NftStateMachine>::new(
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let app = rt.block_on(async move {AppNode::<Nft, NftTransaction, NftStateMachine>::new(
         AppNodeConfig {
             prover_mode: true, 
             light_client_url: String::from("http://127.0.0.1:8001"), 
@@ -37,7 +31,7 @@ fn main() {
         AppChain::Nft
     ).await });
 
-    let mut app_clone = app.clone();
+    let app_clone = app.clone();
     rt.block_on(async move {
         tokio::spawn(async move { app.run().await });
 
@@ -48,5 +42,5 @@ fn main() {
         ).await;
     });
     
-    ()
+    
 }

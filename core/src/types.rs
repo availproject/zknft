@@ -13,7 +13,7 @@ use serde_big_array::BigArray;
 #[cfg(any(feature = "native", feature = "native-metal"))]
 use std::marker::PhantomData;
 #[cfg(any(feature = "native", feature = "native-metal"))]
-use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler, Route};
+use actix_web::{Responder, FromRequest, Handler};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);

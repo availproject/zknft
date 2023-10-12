@@ -176,7 +176,7 @@ impl AvailBlock {
 
     pub fn find_tx(&self, hash: &H256) -> Option<AvailBlobTransaction> {
         for transaction in &self.transactions {
-            if transaction.hash == hash.clone() {
+            if transaction.hash == *hash {
                 return Some(transaction.clone());
             }
         }

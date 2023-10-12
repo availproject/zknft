@@ -145,7 +145,7 @@ impl DaProvider {
             HeightOrHash::Hash(i) => {
                 let hash = H256::from(i);
 
-               (node_client.rpc().header(Some(hash.clone())).await?.unwrap(), hash)
+               (node_client.rpc().header(Some(hash)).await?.unwrap(), hash)
             }
         };
         let height = header.number();

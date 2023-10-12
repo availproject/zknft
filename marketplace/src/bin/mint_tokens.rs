@@ -1,22 +1,21 @@
-use structopt::StructOpt;
+
 use nft_core::{
-    nft::types::{NftId, Nft, Transfer, Trigger, NftTransactionMessage, NftTransaction, Mint}, 
-    payments::types::{PaymentReceiptData, Transaction, CallType}, 
-    types::{TransactionReceipt, TxSignature, Address}
+    nft::types::{NftId, NftTransactionMessage, NftTransaction, Mint}, 
+    types::{TxSignature, Address}
 };
 use sparse_merkle_tree::H256;
-use tokio::time::Duration;
-use sparse_merkle_tree::traits::Value;
+
+
 use serde::{ de::DeserializeOwned, Serialize, Deserialize};
 use primitive_types::U256;
-use sparse_merkle_tree::MerkleProof;
-use core::future::Future;
-use futures::future;
+
+
+
 use reqwest::Error;
 
-use rand::rngs::OsRng;
+
 use ed25519_consensus::{Signature, SigningKey};
-use sha2::Sha512;
+
 use sha2::Digest;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -45,7 +44,7 @@ async fn main() -> Result<(), Error>  {
 
     let signature: Signature = signing_key.sign(&nft_tx.to_vec());
 
-    match mint.from.verify_msg(&TxSignature::from(signature.clone()), &nft_tx.to_vec())
+    match mint.from.verify_msg(&TxSignature::from(signature), &nft_tx.to_vec())
     {
         true => { println!("Verification done")},
         false => { println!("Verification failed.")},

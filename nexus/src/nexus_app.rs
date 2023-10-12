@@ -1,9 +1,9 @@
-use hex;
-use nft_core::traits::Leaf;
+
+
 use nft_core::{
     db::NodeDB,
     state::VmState,
-    types::{BatchHeader, TransactionReceipt, BatchWithProof, DABatch},
+    types::{BatchHeader, TransactionReceipt, DABatch},
     nft::types::NftTransaction, 
     payments::types::Transaction as PaymentsTransaction,
 };
@@ -11,17 +11,17 @@ use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
 use primitive_types::H256 as SubstrateH256;
-use std::thread;
+
 use std::time::Duration;
-use serde_json::{from_slice as from_json_slice, to_vec as to_json_vec};
+
 use crate::types::{AppChain, DaTxPointer, SubmitProofParam, ReceiptQuery};
 
 //Below imports for HTTP server.
-use actix_web::error;
-use actix_web::rt::System;
+
+
 use actix_web::HttpResponse;
-use actix_web::{get, web, App, HttpServer, Responder};
-use avail::avail::AvailBlock;
+use actix_web::{web, App, HttpServer, Responder};
+
 use avail::service::DaProvider;
 use avail::avail::AvailBlobTransaction;
 use nft_methods::TRANSFER_ID as NFT_ID;
@@ -67,7 +67,7 @@ impl AppState {
     }
 
     pub fn get_last_nft_verified_batch(&self) -> BatchHeader {
-        if self.verified_nft_batches.len() == 0 {
+        if self.verified_nft_batches.is_empty() {
             self.last_aggregated_nft_batch.clone()
         } else {
             match self.verified_nft_batches.last() {
@@ -78,7 +78,7 @@ impl AppState {
     }
 
     pub fn get_last_payments_verified_batch(&self) -> BatchHeader {
-        if self.verified_payments_batches.len() == 0 {
+        if self.verified_payments_batches.is_empty() {
             self.last_aggregated_payments_batch.clone()
         } else {
             match self.verified_payments_batches.last() {
@@ -115,17 +115,17 @@ impl OrderedBatches {
         self.0.first()
     }
 
-    pub fn add_batch(&mut self, batch: BatchWithReceipts) -> () {
+    pub fn add_batch(&mut self, batch: BatchWithReceipts) {
         self.0.push(batch);
     }
 
-    pub fn delete_first(&mut self) -> () {
+    pub fn delete_first(&mut self) {
         if !self.0.is_empty() {
             self.0.remove(0);
         }
     }
 
-    pub fn clear(&mut self) -> () {
+    pub fn clear(&mut self) {
         if !self.0.is_empty() {
             self.0.clear();
         }
@@ -155,7 +155,7 @@ impl NexusApp {
         }
     }
 
-    pub async fn start(&mut self) -> () {
+    pub async fn start(&mut self) {
         loop {
             self.aggregate_proofs();
 
@@ -165,10 +165,10 @@ impl NexusApp {
 
     fn aggregate_proofs(
         &mut self,
-    ) -> () {
+    ) {
         let mut app_state = self.app_state.lock().unwrap();
         let mut tree_state = self.tree_state.lock().unwrap();
-        let mut db = self.db.lock().unwrap();
+        let db = self.db.lock().unwrap();
         println!(
             "aggregating proofs: {:?}, {:?}",
             app_state.verified_payments_batches.len(), app_state.verified_payments_batches.len()
@@ -183,7 +183,7 @@ impl NexusApp {
             receipts_to_add.extend(batch.receipts.clone());
         }
 
-        if receipts_to_add.len() > 0 {
+        if !receipts_to_add.is_empty() {
             let state_update = match tree_state.update_set(receipts_to_add) {
                 Ok(i) => i,
                 Err(e) => {
@@ -285,7 +285,7 @@ impl NexusApp {
         blob: &[u8],
     ) -> Result<(), Error> {
         let mut app_state = self.app_state.lock().unwrap();
-        let da_batch: DABatch<NftTransaction> = match bincode::deserialize(blob) {
+        let _da_batch: DABatch<NftTransaction> = match bincode::deserialize(blob) {
             Ok(i) => i, 
             Err(e) => return Err(anyhow!("Da batch deserialization failed due to error: {:?}", e))
         };
@@ -302,9 +302,9 @@ impl NexusApp {
 
         println!("verifying NFT batch.");
         match session_receipt.verify(NFT_ID) {
-            Ok(i) => Ok::<(), Error>(()),
+            Ok(_i) => Ok::<(), Error>(()),
             //TODO: Simplify this chaining.
-            Err(e) => {
+            Err(_e) => {
                 return Err(anyhow!("Unable to verify proof."))
             }
         };
@@ -355,7 +355,7 @@ impl NexusApp {
             Ok(i) => i, 
             Err(e) => return Err(anyhow!("proof deserialization failed due to error: {:?}", e))
         };
-        let da_batch: DABatch<PaymentsTransaction> = match bincode::deserialize(blob) {
+        let _da_batch: DABatch<PaymentsTransaction> = match bincode::deserialize(blob) {
             Ok(i) => i, 
             Err(e) => return Err(anyhow!("Da batch deserialization failed due to error: {:?}", e))
         };
@@ -364,9 +364,9 @@ impl NexusApp {
 
         println!("verifying payments batch.");
         match session_receipt.verify(PAYMENTS_ID) {
-            Ok(i) => Ok::<(), Error>(()),
+            Ok(_i) => Ok::<(), Error>(()),
             //TODO: Simplify this chaining.
-            Err(e) => {
+            Err(_e) => {
                 return Err(anyhow!("Unable to verify proof."))
             }
         };
@@ -435,7 +435,7 @@ async fn get_receipt_with_proof(
 
     let receipt_with_proof = match tree_state.get_with_proof(&key) {
         Ok(i) => i,
-        Err(e) => return HttpResponse::InternalServerError().body("Internal error."),
+        Err(_e) => return HttpResponse::InternalServerError().body("Internal error."),
     };
 
     HttpResponse::Ok().json(receipt_with_proof)
