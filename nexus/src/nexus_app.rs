@@ -202,8 +202,16 @@ impl NexusApp {
                 proof_number: app_state.last_aggregated_batch.proof_number + 1,
                 receipts_root: state_update.post_state_root,
             };
+            
+            //TODO: Ensure there are no race conditions here, so a new batch, not aggregated is not stored.
+            //Most probably, there are no race conditions, as we lock app_state here.
+            let last_aggregated_nft_batch = app_state.get_last_nft_verified_batch();
+            let last_aggregated_payments_batch = app_state.get_last_payments_verified_batch();
+            
             //TODO: Set this through a method.
             app_state.last_aggregated_batch = last_aggregated_batch.clone();
+            app_state.last_aggregated_nft_batch = last_aggregated_nft_batch;
+            app_state.last_aggregated_payments_batch = last_aggregated_payments_batch;
 
             match db.put::<AggregatedBatch>(b"last_aggregated_proof", &last_aggregated_batch) {
                 Ok(()) => (),
@@ -397,7 +405,10 @@ async fn submit_batch(
     
     match service.submit_batch(deserialized_call).await {
         Ok(()) => "Proof verified and submitted successfully.", 
-        Err(e) => "Proof submission failed."
+        Err(e) => {
+            println!("{:?}", e);
+            "Proof submission failed."
+        }
     }
 }
 

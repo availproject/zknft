@@ -10,6 +10,10 @@ use sparse_merkle_tree::{
 use ed25519_consensus::Signature;
 use ed25519_consensus::VerificationKey;
 use serde_big_array::BigArray;
+#[cfg(any(feature = "native", feature = "native-metal"))]
+use std::marker::PhantomData;
+#[cfg(any(feature = "native", feature = "native-metal"))]
+use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler, Route};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -208,4 +212,42 @@ pub struct SubmitProofParam {
     pub receipts: Vec<TransactionReceipt>,
     pub chain: AppChain,
     pub da_tx_pointer: DaTxPointer,
+}
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg(any(feature = "native", feature = "native-metal"))]
+pub struct RPCMethod
+< 
+    F: Handler<Args> + std::marker::Send + Clone, 
+    Args: FromRequest + 'static + std::marker::Send
+> (pub String,pub F, PhantomData<Args>)
+where 
+F::Output: Responder + 'static,;
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
+impl
+< 
+    F: Handler<Args> + std::marker::Send + Clone, 
+    Args: FromRequest + 'static + std::marker::Send
+> 
+RPCMethod <F, Args>
+where 
+F::Output: Responder + 'static,
+{
+    pub fn new(path: String, method: F) -> Self {
+        Self(path, method, PhantomData)
+    }
+}
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
+impl<F, Args> Clone for RPCMethod<F, Args>
+where
+    F: Handler<Args> + std::marker::Send + Clone, 
+    Args: FromRequest + 'static + std::marker::Send,
+    F::Output: Responder + 'static
+{
+    fn clone(&self) -> Self {
+        Self (self.0.clone(), self.1.clone(), self.2)
+    }
 }

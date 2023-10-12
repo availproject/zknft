@@ -4,8 +4,8 @@ use nft_core::{
         types::{Nft, NftTransaction, NftId},
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeConfig, start_rpc_server}, 
-    types::AppChain
+    app_node::{AppNode, AppNodeConfig, start_rpc_server, RPCServer, api_handler}, 
+    types::{AppChain, RPCMethod}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use primitive_types::U256;
@@ -19,6 +19,8 @@ use sparse_merkle_tree::{
     SparseMerkleTree, H256,
 };
 use std::time::SystemTime;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 fn main() {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
@@ -38,8 +40,12 @@ fn main() {
     let mut app_clone = app.clone();
     rt.block_on(async move {
         tokio::spawn(async move { app.run().await });
-        
-        start_rpc_server(app_clone, 7000).await;
+
+        RPCServer::new(Arc::new(Mutex::new(app_clone)), 7000).run(
+            vec![
+                RPCMethod::new(String::from("/"), api_handler::<Nft, NftTransaction, NftStateMachine>)
+            ]
+        ).await;
     });
     
     ()

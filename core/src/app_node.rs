@@ -7,6 +7,7 @@ use crate::types::BatchHeader;
 use crate::types::TransactionReceipt;
 use crate::types::TransactionWithReceipt;
 use crate::types::BatchWithProof;
+use crate::types::RPCMethod;
 use crate::types::{DaTxPointer, SubmitProofParam, AppChain};
 use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
 
@@ -28,6 +29,7 @@ use sparse_merkle_tree::MerkleProof;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 use std::time::Duration;
+use core::ops::Fn;
 
 use std::io::prelude::*;
 use flate2::Compression;
@@ -39,7 +41,7 @@ const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
 const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
 
 use actix_web::HttpResponse;
-use actix_web::{web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler, Route};
 use reqwest;
 
 use std::sync::Arc;
@@ -406,7 +408,7 @@ S: StateMachine<V, T> + std::marker::Send,
     HttpResponse::Ok().json(state_with_proof)
 }
 
-async fn api_handler<V, T, S>(
+pub async fn api_handler<V, T, S>(
     service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
     call: web::Json<T>,
 ) -> impl Responder
@@ -441,4 +443,71 @@ where
     .unwrap()
     .run()
     .await;
+}
+
+pub struct RPCServer<V, T, S> where 
+V: Serialize + DeserializeOwned + std::marker::Send + Clone,
+T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+S: StateMachine<V, T> + std::marker::Send,
+{
+    shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, 
+    port: u16,
+}
+
+impl<
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + 'static,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+    S: StateMachine<V, T> + std::marker::Send + 'static,
+> RPCServer <V, T, S> 
+{
+    pub fn new(shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, port: u16) -> Self {   
+
+        RPCServer {
+            shared_app_node, 
+            port
+        }
+    }
+
+    // pub fn register() -> Self {
+
+    // }
+
+    // pub fn create_route<F, Args>(rpc_method: F) -> dyn Fn() -> F + std::marker::Send + 'static 
+    // where 
+    // F: Handler<Args> + std::marker::Send,
+    // Args: FromRequest + 'static + std::marker::Send,
+    // F::Output: Responder + 'static
+    // {
+    //     move || {
+    //             web::post().to(rpc_method)
+    //             // .route("/", web::post().to(api_handler::<V, T, S>))
+    //             // .route("/state", web::get().to(get_state_with_proof::<V, T, S>));
+    //     }
+    // }
+
+    pub async fn run<F, Args>(&self, rpc_methods: Vec<RPCMethod<F, Args>>) -> () 
+    where  
+    F: Handler<Args> + std::marker::Send + Clone + std::marker::Sync,
+    Args: FromRequest + 'static + std::marker::Send + std::marker::Sync,
+    F::Output: Responder + 'static
+    {
+        let shared_app_node = self.shared_app_node.clone();
+        //let methods = self.rpc_methods.clone();
+
+        let server = HttpServer::new(move || {
+            let mut app = App::new()
+                .app_data(web::Data::new(shared_app_node.clone()));
+
+            for method in &rpc_methods {
+                app = app.route(&method.0, web::post().to(method.1.clone()));
+            }
+
+            app
+        })
+        .bind(("127.0.0.1", self.port))
+        .unwrap();
+
+        println!("Starting rpc server");
+        server.run().await;
+    }
 }
