@@ -1,3 +1,4 @@
+mod rpc_endpoints;
 use nft_core::{
     nft::{
         state_machine::NftStateMachine,
@@ -8,13 +9,9 @@ use nft_core::{
     types::{AppChain, RPCMethod}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
-
-
-
-
-
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use crate::rpc_endpoints::get_listed_nfts;
 
 fn main() {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -37,7 +34,7 @@ fn main() {
 
         RPCServer::new(Arc::new(Mutex::new(app_clone)), 7000).run(
             vec![
-                RPCMethod::new(String::from("/"), api_handler::<Nft, NftTransaction, NftStateMachine>)
+                RPCMethod::new(String::from("/listed-nfts"), get_listed_nfts)
             ]
         ).await;
     });

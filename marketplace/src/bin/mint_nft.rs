@@ -44,7 +44,7 @@ async fn main() -> Result<(), Error>  {
   let signing_key: SigningKey = SigningKey::from(keypair_data.keypair_bytes);
   
     let mint = Mint {
-        id: NftId(U256::from_dec_str("3").unwrap()), 
+        id: NftId(U256::from_dec_str("1").unwrap()), 
         from: Address(H256::from(signing_key.verification_key().to_bytes())),
         to: Address(H256::from(signing_key.verification_key().to_bytes())), 
         data: None,
