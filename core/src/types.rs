@@ -13,7 +13,7 @@ use serde_big_array::BigArray;
 #[cfg(any(feature = "native", feature = "native-metal"))]
 use std::marker::PhantomData;
 #[cfg(any(feature = "native", feature = "native-metal"))]
-use actix_web::{Responder, FromRequest, Handler};
+use http::status::StatusCode;
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -215,39 +215,28 @@ pub struct SubmitProofParam {
 }
 
 #[cfg(any(feature = "native", feature = "native-metal"))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg(any(feature = "native", feature = "native-metal"))]
-pub struct RPCMethod
-< 
-    F: Handler<Args> + std::marker::Send + Clone, 
-    Args: FromRequest + 'static + std::marker::Send
-> (pub String,pub F, PhantomData<Args>)
-where 
-F::Output: Responder + 'static,;
-
-#[cfg(any(feature = "native", feature = "native-metal"))]
-impl
-< 
-    F: Handler<Args> + std::marker::Send + Clone, 
-    Args: FromRequest + 'static + std::marker::Send
-> 
-RPCMethod <F, Args>
-where 
-F::Output: Responder + 'static,
-{
-    pub fn new(path: String, method: F) -> Self {
-        Self(path, method, PhantomData)
-    }
+#[derive(Debug)]
+pub enum ClientReply<T: Serialize> {
+    Ok(T), 
+    Error(anyhow::Error), 
+    BadRequest,
 }
-
 #[cfg(any(feature = "native", feature = "native-metal"))]
-impl<F, Args> Clone for RPCMethod<F, Args>
-where
-    F: Handler<Args> + std::marker::Send + Clone, 
-    Args: FromRequest + 'static + std::marker::Send,
-    F::Output: Responder + 'static
-{
-    fn clone(&self) -> Self {
-        Self (self.0.clone(), self.1.clone(), self.2)
+impl <T: Send + Serialize> warp::Reply for ClientReply<T> {
+    fn into_response(self) -> warp::reply::Response {
+        match self {
+            ClientReply::Ok(i) => warp::reply::with_status(
+                    warp::reply::json(&i), 
+                    StatusCode::OK,
+            ).into_response(), 
+            ClientReply::Error(e) => warp::reply::with_status(
+				warp::reply::json(&e.to_string()),
+				StatusCode::INTERNAL_SERVER_ERROR,
+            ).into_response(),
+            ClientReply::BadRequest => warp::reply::with_status(
+				warp::reply::json(&"Bad Request".to_owned()),
+				StatusCode::BAD_REQUEST,
+            ).into_response(),
+        }
     }
 }

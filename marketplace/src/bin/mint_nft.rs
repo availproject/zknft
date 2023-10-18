@@ -1,21 +1,13 @@
 
 use nft_core::{
-    nft::types::{NftId, NftTransactionMessage, NftTransaction, Mint}, 
+    nft::types::{NftId, NftTransactionMessage, NftTransaction, Mint, NftMetadata}, 
     types::{TxSignature, Address}
 };
 use sparse_merkle_tree::H256;
-
-
 use serde::{ de::DeserializeOwned, Serialize, Deserialize};
 use primitive_types::U256;
-
-
-
 use reqwest::Error;
-
-
 use ed25519_consensus::{Signature, SigningKey};
-
 use sha2::Digest;
 
 struct Sell {
@@ -36,19 +28,25 @@ struct Data {
 #[tokio::main]
 async fn main() -> Result<(), Error>  {
   let json_data = std::fs::read_to_string("keypair.json").unwrap();
-  let nft_url = "http://127.0.0.1:7000/";
+  let nft_url = "http://127.0.0.1:7000/tx";
   // Deserialize the JSON data into a struct
   let keypair_data: Data = serde_json::from_str(&json_data).unwrap();
 
   // Create a SigningKey from the deserialized keypair_bytes
   let signing_key: SigningKey = SigningKey::from(keypair_data.keypair_bytes);
-  
+    let metadata: NftMetadata = NftMetadata {
+        url: String::from(""),
+        description: String::from(""), 
+        name: String::from(""),
+    };
+
     let mint = Mint {
         id: NftId(U256::from_dec_str("1").unwrap()), 
         from: Address(H256::from(signing_key.verification_key().to_bytes())),
         to: Address(H256::from(signing_key.verification_key().to_bytes())), 
         data: None,
-        future_commitment: None
+        future_commitment: None,
+        metadata,
     };
     let nft_tx = NftTransactionMessage::Mint(mint.clone());
 

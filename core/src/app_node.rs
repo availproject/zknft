@@ -4,13 +4,11 @@ use crate::traits::TxHasher;
 use crate::types::AggregatedBatch;
 use crate::types::DABatch;
 use crate::types::BatchHeader;
-
 use crate::types::TransactionWithReceipt;
 use crate::types::BatchWithProof;
-use crate::types::RPCMethod;
+use crate::types::ClientReply;
 use crate::types::{DaTxPointer, SubmitProofParam, AppChain};
 use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
-
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
     serde::{from_slice, to_vec},
@@ -19,32 +17,25 @@ use risc0_zkvm::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use anyhow::{Error, anyhow};
-
-
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 use std::time::Duration;
-
-
+use std::net::SocketAddr;
+use std::str::FromStr;
+use anyhow::Context;
 use std::io::prelude::*;
-
-
-
+use core::convert::Infallible;
 //Below imports for HTTP server.
-
-const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
-const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
-
-use actix_web::HttpResponse;
-use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler};
+use warp::{Filter, reject::Reject, reply::Reply, Rejection};
 use reqwest;
-
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
+const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
 
 #[derive(Clone)]
 pub struct AppNodeConfig {
@@ -58,7 +49,7 @@ pub struct AppNodeConfig {
 }
 
 pub struct AppNode<V: Clone, T: Clone + DeserializeOwned + Serialize, S: StateMachine<V, T>> {
-    state_machine: Arc<Mutex<S>>,
+    pub state_machine: Arc<Mutex<S>>,
     db: Arc<Mutex<NodeDB>>,
     da_service: AvailDaProvider,
     chain: AppChain,
@@ -386,61 +377,64 @@ fn hex_string_to_u8_array(hex_string: &str) -> [u8; 32] {
   
     array
 }
-async fn get_state_with_proof<V, T, S>(
-    service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
-    call: web::Query<StateQuery>,
-) -> impl Responder where
-V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
-S: StateMachine<V, T> + std::marker::Send,
-{
-    let app = service.lock().await;
-    let deserialized_call: StateQuery = call.into_inner();
-    let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
+// async fn get_state_with_proof<V, T, S>(
+//     service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
+//     call: web::Query<StateQuery>,
+// ) -> impl Responder where
+// V: Serialize + DeserializeOwned + std::marker::Send + Clone,
+// T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+// S: StateMachine<V, T> + std::marker::Send,
+// {
+//     let app = service.lock().await;
+//     let deserialized_call: StateQuery = call.into_inner();
+//     let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
     
-    let state_with_proof = match app.get_state_with_proof(&key).await {
-      Ok(i) => i,
-      Err(_e) => return HttpResponse::InternalServerError().body("Internal error.")
-    };
+//     let state_with_proof = match app.get_state_with_proof(&key).await {
+//       Ok(i) => i,
+//       Err(_e) => return HttpResponse::InternalServerError().body("Internal error.")
+//     };
     
-    HttpResponse::Ok().json(state_with_proof)
-}
+//     HttpResponse::Ok().json(state_with_proof)
+// }
+
+// pub fn with_service<V, T, S>(service: Arc<Mutex<AppNode<V, T, S>>>) ->  impl Filter<Extract = (Arc<Mutex<AppNode<V, T, S>>>), Error = Infallible> + Clone
+// where
+//     V: Serialize + DeserializeOwned + std::marker::Send + Clone,
+//     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+//     S: StateMachine<V, T> + std::marker::Send,
+// {
+//     warp::any().map(move || service.clone())
+// }
 
 pub async fn api_handler<V, T, S>(
-    service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
-    call: web::Json<T>,
-) -> impl Responder
+    service: Arc<Mutex<AppNode<V, T, S>>>,
+    call: T,
+) ->  Result<ClientReply<String>, Infallible>
 where
-    V: Serialize + DeserializeOwned + std::marker::Send + Clone,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync,
     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
     S: StateMachine<V, T> + std::marker::Send,
 {
     let app = service.lock().await;
     println!("Adding transaction to pool.");
 
-    app.add_to_tx_pool(call.clone()).await;
+    app.add_to_tx_pool(call).await;
 
-    "Transaction Added to batch."
+    Ok(ClientReply::Ok(String::from("Transaction added to batch.")))
 }
 
-pub async fn start_rpc_server<V, T, S>(singleton: AppNode<V, T, S>, port: u16)
+pub fn routes<V, T, S>(service: Arc<Mutex<AppNode<V, T, S>>>) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone 
 where
-    V: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync,
     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
-    S: StateMachine<V, T> + std::marker::Send + 'static,
+    S: StateMachine<V, T> + std::marker::Send,
 {
-    let shared_service = Arc::new(Mutex::new(singleton));
-    println!("Starting rpc server");
-    HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(shared_service.clone()))
-            .route("/", web::post().to(api_handler::<V, T, S>))
-            .route("/state", web::get().to(get_state_with_proof::<V, T, S>))
-    })
-    .bind(("127.0.0.1", port))
-    .unwrap()
-    .run()
-    .await;
+    let send_tx = warp::path!("tx")
+            .and(warp::any().map(move || service.clone()))
+            .and(warp::body::json())
+            .and_then(api_handler::<V, T, S>);
+
+    send_tx
 }
 
 pub struct RPCServer<V, T, S> where 
@@ -450,6 +444,7 @@ S: StateMachine<V, T> + std::marker::Send,
 {
     shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, 
     port: u16,
+    host: String,
 }
 
 impl<
@@ -458,54 +453,27 @@ impl<
     S: StateMachine<V, T> + std::marker::Send + 'static,
 > RPCServer <V, T, S> 
 {
-    pub fn new(shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, port: u16) -> Self {   
+    pub fn new(shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, host: String, port: u16) -> Self {   
 
         RPCServer {
             shared_app_node, 
+            host,
             port
         }
     }
-
-    // pub fn register() -> Self {
-
-    // }
-
-    // pub fn create_route<F, Args>(rpc_method: F) -> dyn Fn() -> F + std::marker::Send + 'static 
-    // where 
-    // F: Handler<Args> + std::marker::Send,
-    // Args: FromRequest + 'static + std::marker::Send,
-    // F::Output: Responder + 'static
-    // {
-    //     move || {
-    //             web::post().to(rpc_method)
-    //             // .route("/", web::post().to(api_handler::<V, T, S>))
-    //             // .route("/state", web::get().to(get_state_with_proof::<V, T, S>));
-    //     }
-    // }
-
-    pub async fn run<F, Args>(&self, rpc_methods: Vec<RPCMethod<F, Args>>) 
-    where  
-    F: Handler<Args> + std::marker::Send + Clone + std::marker::Sync,
-    Args: FromRequest + 'static + std::marker::Send + std::marker::Sync,
-    F::Output: Responder + 'static
-    {
-        let shared_app_node = self.shared_app_node.clone();
-        //let methods = self.rpc_methods.clone();
-
-        let server = HttpServer::new(move || {
-            let mut app = App::new()
-                .app_data(web::Data::new(shared_app_node.clone()));
-
-            for method in &rpc_methods {
-                app = app.route(&method.0, web::post().to(method.1.clone()));
-            }
-
-            app
-        })
-        .bind(("127.0.0.1", self.port))
+    
+    pub async fn run<F>(&self, routes: F)
+    where 
+        F: Filter + Clone + Send + Sync + 'static,
+        F::Extract: Reply,
+        F::Error: Into<Rejection>,
+    {   
+        //TODO: Maybe return error instead of panicking here.
+        let address = SocketAddr::from_str(format!("{}:{}", &self.host, &self.port).as_str())
+        .context("Unable to parse host address from config")
         .unwrap();
 
-        println!("Starting rpc server");
-        server.run().await;
+        println!("RPC Server running on: {:?}", &address);
+        warp::serve(routes).run(address).await;
     }
 }

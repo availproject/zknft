@@ -41,6 +41,7 @@ impl NftStateTransition {
                     owner: params.to.clone(),
                     nonce: updated_nonce,
                     future: None,
+                    metadata: pre_state.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -62,6 +63,7 @@ impl NftStateTransition {
                         to: params.to.clone(),
                         commitment: i,
                     }),
+                    metadata: pre_state.metadata,
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
@@ -92,6 +94,7 @@ impl NftStateTransition {
                     owner: params.to.clone(),
                     nonce: 1,
                     future: None,
+                    metadata: params.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -114,6 +117,7 @@ impl NftStateTransition {
                         to: params.to.clone(),
                         commitment: i,
                     }),
+                    metadata: params.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -149,6 +153,7 @@ impl NftStateTransition {
                     owner: Address::zero(),
                     nonce: updated_nonce,
                     future: None,
+                    metadata: pre_state.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -170,6 +175,7 @@ impl NftStateTransition {
                         to: Address::zero(),
                         commitment: i,
                     }),
+                    metadata: pre_state.metadata,
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
@@ -223,6 +229,7 @@ impl NftStateTransition {
                     id: params.id.clone(),
                     owner: pre_state.owner.clone(),
                     future: None,
+                    metadata: pre_state.metadata,
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
@@ -244,6 +251,7 @@ impl NftStateTransition {
                     owner: future.to.clone(),
                     future: None,
                     nonce: updated_nonce,
+                    metadata: pre_state.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,

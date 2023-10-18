@@ -5,13 +5,14 @@ use nft_core::{
         types::{Nft, NftTransaction},
     },
     traits::StateMachine,
-    app_node::{AppNode, AppNodeConfig, RPCServer, api_handler}, 
-    types::{AppChain, RPCMethod}
+    app_node::{AppNode, AppNodeConfig, RPCServer, routes},
+    types::{AppChain}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::rpc_endpoints::get_listed_nfts;
+use crate::rpc_endpoints::nft_routes;
+use warp::Filter;
 
 fn main() {
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -32,12 +33,8 @@ fn main() {
     rt.block_on(async move {
         tokio::spawn(async move { app.run().await });
 
-        RPCServer::new(Arc::new(Mutex::new(app_clone)), 7000).run(
-            vec![
-                RPCMethod::new(String::from("/listed-nfts"), get_listed_nfts)
-            ]
-        ).await;
+        let mutex_app = Arc::new(Mutex::new(app_clone.clone()));
+        let routes = routes(mutex_app.clone()).or(nft_routes(mutex_app.clone()));
+        RPCServer::new(mutex_app, String::from("127.0.0.1"), 7000).run(routes).await;
     });
-    
-    
 }

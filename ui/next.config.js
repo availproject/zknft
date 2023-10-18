@@ -1,11 +1,12 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
   images: {
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'img.freepik.com',
-        pathname: 'free-vector/**'
+        hostname: 'storage.googleapis.com',
+        pathname: '/nftimagebucket/**',
+        port: ''
       }
     ]
   },

@@ -12,7 +12,7 @@ export type NFT = {
 
 export type NFTMetadata = {
   name: string,
-  url: StaticImageData,
+  url: string,
 };
 
 export type Menu = {

@@ -36,6 +36,14 @@ pub struct Nft {
     pub owner: Address,
     pub future: Option<Future>,
     pub nonce: u64,
+    pub metadata: NftMetadata,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
+pub struct NftMetadata {
+    pub url: String,
+    pub description: String, 
+    pub name: String,
 }
 
 impl Value for Nft {
@@ -89,6 +97,7 @@ pub struct Mint {
     pub to: Address,
     pub data: Option<String>,
     pub future_commitment: Option<H256>,
+    pub metadata: NftMetadata,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
