@@ -30,6 +30,7 @@ serde-big-array = "0.5.1"
 anyhow = "1.0.75"
 warp = { version = "0.3.6", optional = true }
 http = { version = "0.2.9", optional = true }
+parity-scale-codec = { version = "3.6.5", features = ["derive"]}
 
 [features]
 default = ["zkvm"]

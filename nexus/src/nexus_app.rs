@@ -246,6 +246,11 @@ impl NexusApp {
             AppChain::Payments => &self.payments_da_service
         };
 
+        println!("{}", match pointer.chain {
+            AppChain::Nft => "NFT", 
+            AppChain::Payments => "Payments"
+        });
+
         let block = match da_service
                 .get_block_with_hash(pointer.block_hash)
                 .await

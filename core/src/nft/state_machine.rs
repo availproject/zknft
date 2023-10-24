@@ -22,6 +22,7 @@ pub struct NftStateMachine {
 
 impl NftStateMachine {
     pub fn register_custodian(&mut self, address: Address) -> () {
+        println!("Registering custodian: {:?}", &address);
         self.custodian = Some(address);
     }
 
@@ -31,6 +32,8 @@ impl NftStateMachine {
             Ok(None) => vec![],
             Err(e) => return Err(anyhow!("Could not access db due to error: . {:?}", e)),
         };
+
+        println!("Listed nft ids: {:?}", &listed_nft_ids);
 
         let mut listed_nfts: Vec<Nft> = vec![];
         
@@ -42,6 +45,8 @@ impl NftStateMachine {
                 Err(e) => return Err(anyhow!("Could not get nft from db: {:?}", e)),
             }
         };
+
+        println!("Listed nft ids: {:?}", &listed_nft_ids);
 
         Ok(listed_nfts)
     }
@@ -65,7 +70,9 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         params: NftTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<Nft>, TransactionReceipt), Error> {
-        let nft_id = match params.message {
+        let message: NftTransactionMessage = NftTransactionMessage::try_from(params.clone())?;
+
+        let nft_id = match message {
             NftTransactionMessage::Transfer(ref i) => i.id.clone(),
             NftTransactionMessage::Mint(ref i) => i.id.clone(),
             NftTransactionMessage::Burn(ref i) => i.id.clone(),
@@ -84,7 +91,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         let result = match self.stf.execute_tx(vec![nft.clone()], params, aggregated_proof) {
             Ok(i) => i,
             Err(e) => return Err(e),
-        };       
+        };
 
         let updated_set = result.0;
 

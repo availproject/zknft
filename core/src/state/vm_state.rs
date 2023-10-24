@@ -82,7 +82,7 @@ impl<
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
 
-        println!("Pre: {:?} || Post {:?}", pre_merkle_proof, post_merkle_proof);
+        //println!("Pre: {:?} || Post {:?}", pre_merkle_proof, post_merkle_proof);
 
         Ok(StateUpdate {
             pre_state_root,

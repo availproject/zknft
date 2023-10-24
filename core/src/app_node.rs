@@ -8,6 +8,7 @@ use crate::types::TransactionWithReceipt;
 use crate::types::BatchWithProof;
 use crate::types::ClientReply;
 use crate::types::{DaTxPointer, SubmitProofParam, AppChain};
+use crate::utils::hex_string_to_u8_array;
 use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
@@ -16,6 +17,7 @@ use risc0_zkvm::{
     Executor
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use parity_scale_codec::{Encode, Decode};
 use anyhow::{Error, anyhow};
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
@@ -48,7 +50,7 @@ pub struct AppNodeConfig {
     pub app_id: u32,
 }
 
-pub struct AppNode<V: Clone, T: Clone + DeserializeOwned + Serialize, S: StateMachine<V, T>> {
+pub struct AppNode<V: Clone + Encode + Decode, T: Clone + DeserializeOwned + Serialize + Encode + Decode, S: StateMachine<V, T>> {
     pub state_machine: Arc<Mutex<S>>,
     db: Arc<Mutex<NodeDB>>,
     da_service: AvailDaProvider,
@@ -60,8 +62,8 @@ pub struct AppNode<V: Clone, T: Clone + DeserializeOwned + Serialize, S: StateMa
 }
 
 impl<
-        V: Serialize + DeserializeOwned + Clone,
-        T: Clone + DeserializeOwned + Serialize + TxHasher,
+        V: Serialize + DeserializeOwned + Clone + Encode + Decode,
+        T: Clone + DeserializeOwned + Serialize + TxHasher + Encode + Decode,
         S: StateMachine<V, T>,
     > AppNode<V, T, S>
 {   
@@ -159,9 +161,9 @@ impl<
 
                 match self.execute_batch(tx_pool[0].clone()).await {
                     Ok(()) => (), 
-                    Err(_e) => {
+                    Err(e) => {
+                        println!("Reverting state machine due to error: {:?}", e);
                         let mut state_machine = self.state_machine.lock().await;
-                        println!("Reverting state machine.");
 
                         match state_machine.revert(last_state_root) {
                             Ok(()) => (), 
@@ -263,8 +265,8 @@ impl<
 
         let (block_hash, hash) = match self.da_service.send_transaction(&serialized).await {
             Ok(i) => {
-                println!("{:?}", i); 
-            i}, 
+                i
+            }, 
             //Change from default error.
             Err(e) => {
                 println!("error {:?}", e);
@@ -365,18 +367,7 @@ impl<
 pub struct StateQuery {
   key: String,
 }
-fn hex_string_to_u8_array(hex_string: &str) -> [u8; 32] {
-    let bytes = hex::decode(hex_string).unwrap();
-    
-    if bytes.len() != 32 {
-        panic!("Hexadecimal string must represent exactly 32 bytes");
-    }
-  
-    let mut array = [0u8; 32];
-    array.copy_from_slice(&bytes);
-  
-    array
-}
+
 // async fn get_state_with_proof<V, T, S>(
 //     service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
 //     call: web::Query<StateQuery>,
@@ -411,8 +402,8 @@ pub async fn api_handler<V, T, S>(
     call: T,
 ) ->  Result<ClientReply<String>, Infallible>
 where
-    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync,
-    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send,
 {
     let app = service.lock().await;
@@ -425,8 +416,8 @@ where
 
 pub fn routes<V, T, S>(service: Arc<Mutex<AppNode<V, T, S>>>) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone 
 where
-    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync,
-    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send,
 {
     let send_tx = warp::path!("tx")
@@ -438,8 +429,8 @@ where
 }
 
 pub struct RPCServer<V, T, S> where 
-V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+V: Serialize + DeserializeOwned + std::marker::Send + Clone + Encode + Decode,
+T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
 S: StateMachine<V, T> + std::marker::Send,
 {
     shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, 
@@ -448,8 +439,8 @@ S: StateMachine<V, T> + std::marker::Send,
 }
 
 impl<
-    V: Serialize + DeserializeOwned + std::marker::Send + Clone + 'static,
-    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + 'static + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send + 'static,
 > RPCServer <V, T, S> 
 {

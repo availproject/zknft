@@ -69,7 +69,7 @@ impl PaymentsStateTransition {
                     data: params.data,
                     nonce: from_account.nonce,
                 })
-                .to_vec(),
+                .to_encoded(),
             },
         ))
     }
@@ -79,6 +79,9 @@ impl PaymentsStateTransition {
         params: TransactionMessage,
         pre_state: Vec<Account>,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
+        #[cfg(any(feature = "native", feature = "native-metal"))]
+        println!("\n Executing following transaction: {:?} \n", &params);
+
         let mut from_account: Account = match pre_state[0].clone() {
             i if i == Account::zero() => Account {
                 address: params.from.clone(),
@@ -101,19 +104,23 @@ impl PaymentsStateTransition {
             };
             to_account.balance += params.amount;
 
+
+            #[cfg(any(feature = "native", feature = "native-metal"))]
+            println!("Transaction state update: {:?}", vec![from_account.clone(), to_account.clone()]);
+
             Ok((
                 vec![from_account.clone(), to_account],
                 TransactionReceipt {
                     chain_id: self.chain_id,
                     data: (PaymentReceiptData {
-                        from: Address(H256::from([0u8; 32])),
+                        from: Address([0u8; 32]),
                         to: params.to,
                         amount: params.amount,
                         call_type: params.call_type,
                         data: params.data,
                         nonce: from_account.nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             ))
         } else {
@@ -124,14 +131,14 @@ impl PaymentsStateTransition {
                 TransactionReceipt {
                     chain_id: self.chain_id,
                     data: (PaymentReceiptData {
-                        from: Address(H256::from([0u8; 32])),
+                        from: Address([0u8; 32]),
                         to: params.to,
                         amount: params.amount,
                         call_type: params.call_type,
                         data: params.data,
                         nonce: from_account.nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             ))
         }
@@ -145,7 +152,7 @@ impl StateTransition<Account, PaymentsTransaction> for PaymentsStateTransition {
         params: PaymentsTransaction,
         _aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
-        match params.message.from.verify_msg(&params.signature, &params.message.to_vec(), ) {
+        match params.message.from.verify_msg(&params.signature, &params.message.to_encoded(), ) {
             true => (), 
             false => return Err(anyhow!("Signature verification failed.")),
         }

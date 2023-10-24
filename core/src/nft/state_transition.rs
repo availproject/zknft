@@ -52,7 +52,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
             Some(i) => Ok((
@@ -76,7 +76,7 @@ impl NftStateTransition {
                         nonce: updated_nonce,
                         future_commitment: i,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
         }
@@ -105,7 +105,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: 1,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
             Some(i) => Ok((
@@ -129,7 +129,7 @@ impl NftStateTransition {
                         nonce: 1,
                         future_commitment: i,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
         }
@@ -164,7 +164,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
             Some(i) => Ok((
@@ -188,7 +188,7 @@ impl NftStateTransition {
                         nonce: updated_nonce,
                         future_commitment: i,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
         }
@@ -241,7 +241,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             ))
         } else {
@@ -262,7 +262,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             ))
         }
@@ -276,17 +276,19 @@ impl StateTransition<Nft, NftTransaction> for NftStateTransition {
         params: NftTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
-        match { match params.message.clone() {
-            NftTransactionMessage::Transfer(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
-            NftTransactionMessage::Mint(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
-            NftTransactionMessage::Burn(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
-            NftTransactionMessage::Trigger(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
+        let message: NftTransactionMessage = NftTransactionMessage::try_from(params.clone())?;
+
+        match { match message.clone() {
+            NftTransactionMessage::Transfer(i) => i.from.verify_msg(&params.signature, &params.message),
+            NftTransactionMessage::Mint(i) => i.from.verify_msg(&params.signature, &params.message),
+            NftTransactionMessage::Burn(i) => i.from.verify_msg(&params.signature, &params.message),
+            NftTransactionMessage::Trigger(i) => i.from.verify_msg(&params.signature, &params.message),
         } } {
             true => (),
             false => return Err(anyhow!("Signature verification failed.")),
         };
 
-        match params.message {
+        match message {
             NftTransactionMessage::Transfer(i) => self.transfer(i, pre_state[0].clone()),
             NftTransactionMessage::Mint(i) => self.mint(i, pre_state[0].clone()),
             NftTransactionMessage::Burn(i) => self.burn(i, pre_state[0].clone()),
