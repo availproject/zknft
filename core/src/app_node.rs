@@ -112,38 +112,6 @@ impl<
         }
     }
 
-    //TODO: Complete implementation.
-    // pub async fn sync(&mut self) -> Result<(), Error> {
-    //     let start_height = 283562;
-    //     let light_client_url = "http://127.0.0.1:8000".to_string();
-    //     // Initialize the Avail service using the DaService interface
-    //     let da_service = AvailDaProvider::new(DaServiceConfig {
-    //         node_client_url: "wss://kate.avail.tools:443/ws".to_string(),
-    //         light_client_url,
-    //         seed: String::from("demo_seed"), 
-    //         app_id: 7,
-    //     }).await;
-
-    //     for height in start_height.. {
-    //         let filtered_block = match da_service.get_finalized_at(height).await {
-    //             Ok(i) => i,
-    //             Err(e) => panic!("{}", e.to_string()),
-    //         };
-
-    //         let batch: Option<Batch<T>> = match filtered_block.transactions.is_empty() {
-    //             true => None,
-    //             false => from_json_slice(&filtered_block.transactions[0].blob()).unwrap(),
-    //         };
-
-    //         match batch {
-    //             None => println!("no batches in block"),
-    //             Some(i) => println!("Found batch."),
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
     pub async fn run(&self) -> Result<(), Error> {
         loop {
             let mut tx_pool = self.tx_pool.lock().await;
@@ -196,39 +164,32 @@ impl<
         };
         //TODO: Add proper error handling below by removing unwrap and store last
         //batch in memory.
-        let aggregated_proof: AggregatedBatch =
-            reqwest::get(NEXUS_LATEST_BATCH_URL).await.unwrap().json().await.unwrap();
+        let response = reqwest::get(NEXUS_LATEST_BATCH_URL).await?;
+        let aggregated_proof: AggregatedBatch = response.json().await?;
 
         let mut state_machine = self.state_machine.lock().await;
 
         //TODO: Below should be replaced with a loop to execute a list of transactions.
         let (state_update, receipt) = state_machine
-            .execute_tx(call_params.clone(), aggregated_proof.clone())
-            .unwrap();
-
-        // println!(
-        //     "Pre state: {:?}, Post state: {:?}",
-        //     &state_update.pre_state_root, &state_update.post_state_root
-        // );
+            .execute_tx(call_params.clone(), aggregated_proof.clone())?;
 
         //Note: Have to do this weird construction as tokio spawn complains that 
         //env is not dropped before an async operation below so is not thread safe.
         let (batch, proof) = {
             let mut exec = {
                 let env = ExecutorEnv::builder()
-                    .add_input(&to_vec(&call_params).unwrap())
-                    .add_input(&to_vec(&state_update).unwrap())
-                    .add_input(&to_vec(&(last_batch_number + 1)).unwrap())
-                    .add_input(&to_vec(&aggregated_proof).unwrap())
-                    .build()
-                    .unwrap();
+                    .add_input(&to_vec(&call_params)?)
+                    .add_input(&to_vec(&state_update)?)
+                    .add_input(&to_vec(&(last_batch_number + 1))?)
+                    .add_input(&to_vec(&aggregated_proof)?)
+                    .build()?;
 
-                    Executor::from_elf(env, &self.zkvm_elf).unwrap()
+                    Executor::from_elf(env, &self.zkvm_elf)?
             };
 
             // Run the executor to produce a session.
-            let session = exec.run().unwrap();
-            let segments = session.resolve().unwrap();
+            let session = exec.run()?;
+            let segments = session.resolve()?;
 
             let cycles = segments
                 .iter()
@@ -241,10 +202,10 @@ impl<
             };
 
             println!("Session executed in zkvm with ID {:?}", &self.zkvm_id);
-            session_receipt.verify(self.zkvm_id).unwrap();
+            session_receipt.verify(self.zkvm_id)?;
             
             //TODO: Might not need to be deserialized, and need to remove unwrap.
-            let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
+            let batch_header: BatchHeader = from_slice(&session_receipt.journal)?;
             let _transaction_with_receipt = TransactionWithReceipt {
                 transaction: call_params.clone(),
                 receipt: receipt.clone(),
@@ -259,7 +220,7 @@ impl<
             )
         };
 
-        let serialized = bincode::serialize(&batch).unwrap();
+        let serialized = bincode::serialize(&batch)?;
         
         println!("Non compressed length: {},", serialized.len());
 

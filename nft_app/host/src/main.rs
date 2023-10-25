@@ -6,7 +6,7 @@ use nft_core::{
     },
     traits::StateMachine,
     app_node::{AppNode, AppNodeConfig, RPCServer, routes},
-    types::{AppChain, Address}
+    types::{AppChain, Address, ClientReply}
 };
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use std::sync::Arc;
@@ -15,6 +15,10 @@ use sparse_merkle_tree::H256;
 use crate::rpc_endpoints::nft_routes;
 use ed25519_consensus::{SigningKey};
 use warp::Filter;
+use warp::Rejection;
+use warp::http::StatusCode;
+use warp::Reply;
+use std::convert::Infallible;
 use serde::{ de::DeserializeOwned, Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -55,7 +59,41 @@ fn main() {
         tokio::spawn(async move { app.run().await });
 
         let mutex_app = Arc::new(Mutex::new(app_clone.clone()));
-        let routes = routes(mutex_app.clone()).or(nft_routes(mutex_app.clone()));
+        let nft_routes = routes(mutex_app.clone()).or(nft_routes(mutex_app.clone()));
+        let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(vec!["GET", "POST", "DELETE"])
+        .allow_headers(vec!["content-type"]);
+
+        let routes = nft_routes.with(cors).recover(handle_rejection);
         RPCServer::new(mutex_app, String::from("127.0.0.1"), 7000).run(routes).await;
     });
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ErrorMessage {
+    code: u16, 
+    message: String,
+}
+
+async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+    let mut code = StatusCode::OK;
+    let mut message = "OK";
+
+    println!("{:?}", &err);
+
+    if err.is_not_found() {
+        code = StatusCode::NOT_FOUND;
+        message = "NOT_FOUND";
+    } else if let Some(ClientReply) = err.find::<ClientReply<String>>() {
+        code = StatusCode::BAD_REQUEST;
+        message = "BAD_REQUEST";
+    }
+
+    let json = warp::reply::json(&ErrorMessage {
+        code: code.as_u16(),
+        message: message.into(),
+    });
+
+    Ok(warp::reply::with_status(json, code))
 }

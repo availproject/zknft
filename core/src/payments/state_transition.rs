@@ -37,11 +37,11 @@ impl PaymentsStateTransition {
         };
 
         if from_account.balance < params.amount {
-            panic!("Not enough balance");
+            return Err(anyhow!("not enough balance."))
         }
 
         if from_account.address == params.to {
-            panic!("Cannot transfer to self.");
+            return Err(anyhow!("Cannot transfer to self."));
         }
 
         from_account.balance -= params.amount;
@@ -152,14 +152,15 @@ impl StateTransition<Account, PaymentsTransaction> for PaymentsStateTransition {
         params: PaymentsTransaction,
         _aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
-        match params.message.from.verify_msg(&params.signature, &params.message.to_encoded(), ) {
+        let message: TransactionMessage = TransactionMessage::try_from(params.clone())?;
+        match message.from.verify_msg(&params.signature, &params.message) {
             true => (), 
             false => return Err(anyhow!("Signature verification failed.")),
         }
 
-        match params.message.call_type {
-            CallType::Transfer => self.transfer(params.message, pre_state),
-            CallType::Mint => self.mint(params.message, pre_state),
+        match message.call_type {
+            CallType::Transfer => self.transfer(message, pre_state),
+            CallType::Mint => self.mint(message, pre_state),
         }
     }
 }

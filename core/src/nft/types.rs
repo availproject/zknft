@@ -57,8 +57,8 @@ impl Value for Nft {
         }
 
         let mut hasher = ShaHasher::new();
-        let serialized = self.to_encoded();
-        hasher.0.update(&serialized);
+        let encoded = self.to_encoded();
+        hasher.0.update(&encoded);
 
         hasher.finish()
     }

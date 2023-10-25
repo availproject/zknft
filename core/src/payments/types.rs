@@ -7,6 +7,7 @@ use risc0_zkvm::sha::rust_crypto::Digest;
 use parity_scale_codec::{Encode, Decode};
 use serde::{Deserialize, Serialize};
 use ed25519_consensus::Signature;
+use anyhow::{anyhow, Error};
 use sparse_merkle_tree::{
     traits::{Hasher, Value},
     H256,
@@ -32,10 +33,9 @@ impl Value for Account {
         }
 
         let mut hasher = ShaHasher::new();
-        let serialized = bincode::serialize(&self).unwrap();
+        let encoded = self.encode();
 
-        hasher.0.update(&serialized);
-
+        hasher.0.update(&encoded);
         hasher.finish()
     }
 
@@ -52,7 +52,7 @@ pub enum CallType {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Encode, Decode)]
 pub struct Transaction {
-    pub message: TransactionMessage,
+    pub message: Vec<u8>,
     pub signature: TxSignature,
 }
 
@@ -68,7 +68,7 @@ pub struct TransactionMessage {
 impl TxHasher for Transaction {
     fn to_h256(&self) -> H256 {
         let mut hasher = ShaHasher::new();
-        let serialized = bincode::serialize(&self).unwrap();
+        let serialized = self.to_encoded();
         hasher.0.update(&serialized);
 
         hasher.finish()
@@ -78,6 +78,10 @@ impl TxHasher for Transaction {
 impl Transaction {
     pub fn signature(&self) -> Signature {
         Signature::from(*self.signature.as_bytes())
+    }
+
+    pub fn to_encoded(&self) -> Vec<u8> {
+        self.encode()
     }
 }
 
@@ -103,48 +107,16 @@ impl PaymentReceiptData {
     }
 }
 
-
-#[cfg(any(feature = "native", feature = "native-metal"))]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct RPCTransactionMessage {
-    pub from: String,
-    pub to: String,
-    pub amount: String,
-    pub call_type: CallType,
-    pub data: Option<String>,
-}
-
-
-#[cfg(any(feature = "native", feature = "native-metal"))]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct RPCTransaction {
-    pub message: RPCTransactionMessage,
-    pub signature: String,
-}
-
-
-#[cfg(any(feature = "native", feature = "native-metal"))]
-impl TryFrom<RPCTransaction> for Transaction {
+impl TryFrom<Transaction> for TransactionMessage {
     type Error = anyhow::Error;
 
-    fn try_from(rpc_transaction: RPCTransaction) -> Result<Self, Self::Error> {
-        let from: Address = Address::try_from(&rpc_transaction.message.from)?;
-        let to: Address = Address::try_from(&rpc_transaction.message.to)?;
-        let amount: u64 = hex_string_to_u64(&rpc_transaction.message.amount)?;
+    fn try_from(value: Transaction) -> Result<Self, Self::Error> {
+        let mut vec_u8 = value.message.clone();
+        let mut slice_u8: &[u8] = &vec_u8;
 
-        let message = TransactionMessage {
-            from,
-            to,
-            amount,
-            call_type: rpc_transaction.message.call_type,
-            data: rpc_transaction.message.data,
-        };
-
-        let signature: TxSignature = TxSignature::try_from(&rpc_transaction.signature)?;
-
-        Ok(Transaction {
-            message,
-            signature,
-        })
+        match TransactionMessage::decode(&mut slice_u8) {
+            Ok(i) => Ok(i),
+            Err(e) => Err(anyhow!("{:?}", e))
+        }
     }
 }

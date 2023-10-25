@@ -2,6 +2,7 @@ import { Carousel } from 'components/carousel';
 import { ThreeItemGrid } from 'components/grid/three-items';
 import Footer from 'components/layout/footer';
 import { Suspense } from 'react';
+import { sendTx } from 'lib/zknft/index';
 
 export const runtime = 'edge';
 

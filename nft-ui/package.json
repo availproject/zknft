@@ -23,11 +23,13 @@
   "dependencies": {
     "@headlessui/react": "^1.7.17",
     "@heroicons/react": "^2.0.18",
+    "@noble/ed25519": "^2.0.0",
     "axios": "^1.5.1",
     "clsx": "^2.0.0",
     "next": "13.5.4",
     "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react-dom": "18.2.0",
+    "subshape": "^0.14.0"
   },
   "devDependencies": {
     "@tailwindcss/container-queries": "^0.1.1",

@@ -1,3 +1,9 @@
+import * as scale from "subshape";
+import { Shape } from "subshape";
+
+export type H256 = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number,];
+export type H512 = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number,]
+
 export type NFTResponseObject = {
   id: string,
   owner: [number],
@@ -23,6 +29,7 @@ export type NFT = {
 export type NftMetadata = {
   name: string,
   url: string,
+  description: string,
 };
 
 export type Menu = {
@@ -35,48 +42,121 @@ export enum MenuType {
   "footer"
 }
 
-// type NftId = {
-//   value: string; // Assuming U256 is a string representation
-// };
+export interface Mint {
+  id: H256;
+  from: H256;
+  to: H256;
+  data: string | undefined;
+  future_commitment: H256 | undefined;
+  metadata: NftMetadata;
+}
 
-// type H256 = number[];
+export interface Burn {
+  id: H256;
+  from: H256;
+  data: string | undefined;
+  future_commitment: H256 | undefined;
+}
 
-// type Address = number[];
+export interface Trigger {
+  id: H256;
+  from: H256;
+  data?: string | null;
+  merkleProof: MerkleProof;
+  receipt: TransactionReceipt;
+}
 
-// interface Mint {
-//   id: NftId;
-//   from: Address;
-//   to: Address;
-//   data?: string | null;
-//   futureCommitment?: H256 | null;
-//   metadata: NftMetadata;
-// }
+export interface Transfer {
+  id: H256;
+  from: H256;
+  to: H256;
+  data: string | undefined;
+  future_commitment: H256 | undefined;
+}
 
-// interface Burn {
-//   id: NftId;
-//   from: Address;
-//   data?: string | null;
-//   futureCommitment?: H256 | null;
-// }
+export type MergeValue = { readonly Value: H256 } |
+{
+  readonly MergeWithZero: {
+    base_node: H256,
+    zero_bits: H256,
+    zero_count: number,
+  }
+} |
+{
+  readonly ShortCut: {
+    key: H256,
+    value: H256,
+    height: number,
+  }
+}
 
-// interface Trigger {
-//   id: NftId;
-//   from: Address;
-//   data?: string | null;
-//   merkleProof: MerkleProof;
-//   receipt: TransactionReceipt;
-// }
+export interface TransactionReceipt {
 
-// export type NftTransactionMessage = {
-//   Transfer: Transfer;
-//   Mint: Mint;
-//   Burn: Burn;
-//   Trigger: Trigger;
-// };
+}
 
-// interface Transfer {
-//   id: NftId;
-//   from: Address;
-//   to: Address;
-//   data?: string | null;
-// }
+export interface MerkleProof {
+  // leaf bitmap, bitmap.get_bit(height) is true means there need a non zero sibling in this height
+  leaves_bitmap: H256[],
+  // needed sibling node hash
+  merkle_path: MergeValue[],
+}
+
+export interface TransferEnum extends Transfer {
+  NftTransactionMessage: "Transfer",
+}
+
+export interface MintEnum extends Mint {
+  NftTransactionMessage: "Mint",
+}
+
+export interface BurnEnum extends Burn {
+  NftTransactionMessage: "Burn",
+}
+
+
+export type NftTransactionMessage = TransferEnum | MintEnum | BurnEnum;
+
+export interface NftTransaction {
+  message: number[],
+  signature: H512,
+}
+
+export const $address: Shape<H256> = scale.sizedArray(scale.u8, 32);
+export const $signature: Shape<H512> = scale.sizedArray(scale.u8, 64);
+
+export const $nft_metadata: Shape<NftMetadata> = scale.object(
+  scale.field("name", scale.str),
+  scale.field("url", scale.str),
+  scale.field('description', scale.str)
+)
+
+export const $mint: Shape<Mint> = scale.object(
+  scale.field("id", $address),
+  scale.field("from", $address),
+  scale.field("to", $address),
+  scale.field("data", scale.option(scale.str)),
+  scale.field("future_commitment", scale.option($address)),
+  scale.field("metadata", $nft_metadata),
+)
+
+export const $transfer: Shape<Transfer> = scale.object(
+  scale.field("id", $address),
+  scale.field("from", $address),
+  scale.field("to", $address),
+  scale.field("data", scale.option(scale.str)),
+  scale.field("future_commitment", scale.option($address)),
+)
+
+export const $burn: Shape<Burn> = scale.object(
+  scale.field("id", $address),
+  scale.field("from", $address),
+  scale.field("data", scale.option(scale.str)),
+  scale.field("future_commitment", scale.option($address)),
+)
+
+export const $transactionMessage: Shape<NftTransactionMessage> = scale.taggedUnion(
+  "NftTransactionMessage", [
+  scale.variant("Transfer", $transfer),
+  scale.variant("Mint", $mint),
+  scale.variant("Burn", $burn)
+]);

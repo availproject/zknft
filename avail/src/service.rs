@@ -135,20 +135,32 @@ impl DaProvider {
         let node_client = self.node_client.clone();
         let (header, hash) = match height_or_hash {
             HeightOrHash::Height(i) => {
-                let hash = node_client
+                let hash = match node_client
                 .rpc()
                 .block_hash(Some(i.into()))
-                .await?
-                .unwrap();
-    
-                (node_client.rpc().header(Some(hash)).await?.unwrap(), hash)
+                .await? {
+                    Some(i) => i, 
+                    None => return Err(anyhow!("Hash for height {} not found.", i))
+                };
+                
+                let header = match node_client.rpc().header(Some(hash)).await? {
+                    Some(i) => i, 
+                    None => return Err(anyhow!("Header not found for hash: {}", hash))
+                };
+
+                (header, hash)
             }, 
             HeightOrHash::Hash(i) => {
                 let hash = H256::from(i);
 
-               (node_client.rpc().header(Some(hash)).await?.unwrap(), hash)
+                let header = match node_client.rpc().header(Some(hash)).await? {
+                    Some(i) => i, 
+                    None => return Err(anyhow!("Header not found for hash: {}", hash))
+                };
+               (header, hash)
             }
         };
+        
         let height = header.number();
         let confidence_url = self.confidence_url(height.into());
         let appdata_url = self.appdata_url(height.into());

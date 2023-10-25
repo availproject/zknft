@@ -1,7 +1,7 @@
 use crate::{
     payments::state_transition::PaymentsStateTransition,
     payments::types::{
-        Account, Transaction as PaymentsTransaction,
+        Account, Transaction as PaymentsTransaction, TransactionMessage
     },
     state::VmState,
     traits::{StateMachine, StateTransition},
@@ -33,8 +33,9 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
         params: PaymentsTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<Account>, TransactionReceipt), Error> {
-        let from_address_key = params.message.from.get_key();
-        let to_address_key = params.message.to.get_key();
+        let message: TransactionMessage = TransactionMessage::try_from(params.clone())?;
+        let from_address_key = message.from.get_key();
+        let to_address_key = message.to.get_key();
 
         let from_account: Account = match self.state.get(&from_address_key) {
             Ok(Some(i)) => i,

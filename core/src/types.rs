@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 #[cfg(any(feature = "native", feature = "native-metal"))]
 use http::status::StatusCode;
 use std::convert::TryFrom;
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -41,6 +41,7 @@ impl Hasher for ShaHasher {
 
     fn finish(self) -> H256 {
         let bytes = self.0.finalize();
+        //TODO: Check if unwrap could be removed.
         let sha2_array: [u8; 32] = bytes.as_slice().try_into().unwrap();
         H256::from(sha2_array)
     }
@@ -163,14 +164,14 @@ impl TryFrom<&String> for TxSignature {
 pub struct Address(pub [u8; 32]);
 
 impl Address {
-    pub fn verification_key(&self) -> VerificationKey {
+    pub fn verification_key(&self) -> Result<VerificationKey, Error> {
         let mut key: [u8; 32] = Default::default();
         let public_key = self.0.as_slice();
 
         key.copy_from_slice(public_key);
 
         //TODO: Better error handling.
-        VerificationKey::try_from(key).unwrap()
+        Ok(VerificationKey::try_from(key)?)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -178,7 +179,10 @@ impl Address {
     }
 
     pub fn verify_msg(&self, sig: &TxSignature, msg: &[u8]) -> bool {
-        let verification_key = self.verification_key();
+        let verification_key = match self.verification_key() {
+            Ok(i) => i, 
+            Err(e) => return false,
+        };
 
         //TODO: Return error instead.
         match verification_key.verify(&sig.as_signature(), msg) {
