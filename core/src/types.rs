@@ -15,8 +15,7 @@ use parity_scale_codec::{Encode, Decode};
 use ed25519_consensus::VerificationKey;
 use ed25519_consensus::Signature;
 use serde_big_array::BigArray;
-#[cfg(any(feature = "native", feature = "native-metal"))]
-use std::marker::PhantomData;
+
 #[cfg(any(feature = "native", feature = "native-metal"))]
 use http::status::StatusCode;
 use std::convert::TryFrom;
@@ -181,7 +180,7 @@ impl Address {
     pub fn verify_msg(&self, sig: &TxSignature, msg: &[u8]) -> bool {
         let verification_key = match self.verification_key() {
             Ok(i) => i, 
-            Err(e) => return false,
+            Err(_e) => return false,
         };
 
         //TODO: Return error instead.
@@ -205,7 +204,7 @@ impl TryFrom<&String> for Address {
     type Error = anyhow::Error;
 
     fn try_from(hex_string: &String) -> Result<Self, Self::Error> {
-        let address_array: [u8; 32] = match hex_string_to_u8_array(&hex_string) {
+        let address_array: [u8; 32] = match hex_string_to_u8_array(hex_string) {
             Ok(i) => i, 
             Err(e) => return Err(e),
         };

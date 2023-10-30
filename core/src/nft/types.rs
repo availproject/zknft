@@ -156,7 +156,7 @@ impl TryFrom<NftTransaction> for NftTransactionMessage {
     type Error = anyhow::Error;
 
     fn try_from(value: NftTransaction) -> Result<Self, Self::Error> {
-        let mut vec_u8 = value.message.clone();
+        let vec_u8 = value.message;
         let mut slice_u8: &[u8] = &vec_u8;
 
         match NftTransactionMessage::decode(&mut slice_u8) {

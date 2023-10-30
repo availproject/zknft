@@ -1,13 +1,12 @@
 use crate::{
     traits::{Leaf, TxHasher},
     types::{ShaHasher, TxSignature, Address},
-    utils::hex_string_to_u64,
 };
 use risc0_zkvm::sha::rust_crypto::Digest;
 use parity_scale_codec::{Encode, Decode};
 use serde::{Deserialize, Serialize};
 use ed25519_consensus::Signature;
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow};
 use sparse_merkle_tree::{
     traits::{Hasher, Value},
     H256,
@@ -69,6 +68,8 @@ impl TxHasher for Transaction {
     fn to_h256(&self) -> H256 {
         let mut hasher = ShaHasher::new();
         let serialized = self.to_encoded();
+        println!("Serialized tx: {:?}", &serialized);
+        
         hasher.0.update(&serialized);
 
         hasher.finish()
@@ -111,7 +112,7 @@ impl TryFrom<Transaction> for TransactionMessage {
     type Error = anyhow::Error;
 
     fn try_from(value: Transaction) -> Result<Self, Self::Error> {
-        let mut vec_u8 = value.message.clone();
+        let vec_u8 = value.message;
         let mut slice_u8: &[u8] = &vec_u8;
 
         match TransactionMessage::decode(&mut slice_u8) {

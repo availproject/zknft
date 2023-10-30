@@ -1,13 +1,14 @@
 
 use nft_core::{
     types::{TxSignature, Address}, 
-    payments::types::{TransactionMessage, Transaction, CallType}
+    payments::types::{TransactionMessage, Transaction, CallType},
+    utils::hex_string_to_u8_array,
 };
 use serde::{ de::DeserializeOwned, Serialize, Deserialize};
 use ed25519_consensus::{Signature, SigningKey};
 use sparse_merkle_tree::H256;
 use primitive_types::U256;
-use reqwest::Error;
+use anyhow::Error;
 use sha2::Digest;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -17,6 +18,7 @@ struct Data {
 
 #[tokio::main]
 async fn main() -> Result<(), Error>  {
+    let mint_to = String::from("0x41083dfd36361213d4e08e4002115f4e83d92b4e2bbc952fbcf56d2a2903eebb");
     let json_data = std::fs::read_to_string("keypair.json").unwrap();
     let payments_url = "http://127.0.0.1:7001/tx";
 
@@ -25,10 +27,12 @@ async fn main() -> Result<(), Error>  {
     // Create a SigningKey from the deserialized keypair_bytes
     let signing_key: SigningKey = SigningKey::from(keypair_data.keypair_bytes);
     let address: Address = Address(signing_key.verification_key().to_bytes());
-    
+    let to: Address = Address(hex_string_to_u8_array(&mint_to)?);
+
+    println!("Address: {:?}", &to);
     let transaction_message: TransactionMessage = TransactionMessage {
         from: address.clone(), 
-        to: address.clone(), 
+        to: to.clone(),
         amount: 1000, 
         call_type: CallType::Mint, 
         data: None,
@@ -47,7 +51,7 @@ async fn main() -> Result<(), Error>  {
     send_post_request(
         payments_url, 
         Transaction {
-            message: transaction_message,
+            message: encoded_message,
             signature: TxSignature::from(signature)
         }
     ).await?;

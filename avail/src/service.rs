@@ -162,7 +162,7 @@ impl DaProvider {
         };
         
         let height = header.number();
-        let confidence_url = self.confidence_url(height.into());
+        let _confidence_url = self.confidence_url(height.into());
         let appdata_url = self.appdata_url(height.into());
 
         //TODO: Wait for confidence.

@@ -1,7 +1,6 @@
 mod rpc_endpoints;
-mod types;
 use nft_core::{
-    app_node::{AppNode, AppNodeConfig, RPCServer},
+    app_node::{AppNode, AppNodeConfig, RPCServer, routes},
     payments::{
         state_machine::PaymentsStateMachine,
         types::{Account, CallType, Transaction},
@@ -27,7 +26,6 @@ use warp::Filter;
 use warp::Rejection;
 use warp::http::StatusCode;
 use warp::Reply;
-use crate::rpc_endpoints::routes;
 use std::convert::Infallible;
 
 fn main() {
@@ -47,9 +45,28 @@ fn main() {
         AppChain::Payments,
     ).await });
 
-    let app_clone = app.clone();
     rt.block_on(async move {
-        tokio::spawn(async move { app.run().await });
+        let app_clone = app.clone();
+
+        let execution_engine = tokio::spawn(async move {
+            loop {
+                let execution_app = app.clone();
+                let execution = tokio::spawn(async move {execution_app.run().await;});
+
+                let result = tokio::try_join!(
+                    execution,
+                );
+            
+                match result {
+                    Ok(_) => {
+                        println!("Thread completed successfully.");
+                    }
+                    Err(e) => {
+                        println!("Thread failed due to panic. restarting node. {:?}", e);
+                    }
+                }
+            }
+        });
 
         let mutex_app = Arc::new(Mutex::new(app_clone.clone()));
         let nft_routes = routes(mutex_app.clone());
@@ -59,7 +76,22 @@ fn main() {
         .allow_headers(vec!["content-type"]);
 
         let routes = nft_routes.with(cors).recover(handle_rejection);
-        RPCServer::new(mutex_app, String::from("127.0.0.1"), 7001).run(routes).await;
+
+        let rpc = tokio::spawn(async move {  RPCServer::new(mutex_app, String::from("127.0.0.1"), 7001).run(routes).await; });
+
+        let result = tokio::try_join!(
+            execution_engine,
+            rpc,
+        );
+    
+        match result {
+            Ok((_, _)) => {
+                println!("Exiting node, should not have happened.");
+            }
+            Err(e) => {
+                println!("Exiting node, should not have happened.");
+            }
+        }
     });
     
     ()
@@ -75,7 +107,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     let mut code = StatusCode::OK;
     let mut message = "OK";
 
-    println!("{:?}", &err);
+    println!("errr {:?}", &err);
 
     if err.is_not_found() {
         code = StatusCode::NOT_FOUND;

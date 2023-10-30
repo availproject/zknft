@@ -31,7 +31,7 @@ use anyhow::Context;
 use std::io::prelude::*;
 use core::convert::Infallible;
 //Below imports for HTTP server.
-use warp::{Filter, reject::Reject, reply::Reply, Rejection};
+use warp::{Filter, reply::Reply, Rejection};
 use reqwest;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -92,13 +92,15 @@ impl<
             Ok(None) => H256::zero(),
             Err(e) => panic!("Could not start node. {:?}", e),
         };
-        let state_machine = Arc::new(Mutex::new(S::new(last_state_root)));
+        let state_machine = Arc::new(Mutex::new(S::new(last_state_root.clone())));
         let da_service = AvailDaProvider::new(DaServiceConfig {
             node_client_url: config.node_client_url,
             light_client_url: config.light_client_url,
             seed: config.seed,
             app_id: config.app_id,
         }).await;
+
+        println!("Creating instance of node at state root: {:?}", &last_state_root);
 
         Self {
             state_machine,
@@ -113,39 +115,70 @@ impl<
     }
 
     pub async fn run(&self) -> Result<(), Error> {
-        loop {
+        {   
+            //Below code is just to cleanup merkle tree and tx pool, to start from last known stable state.
             let mut tx_pool = self.tx_pool.lock().await;
 
-            while !tx_pool.is_empty() {
-                let last_state_root: H256 = {
-                    let db = self.db.lock().await;
+            //TODO: Only clear if failure due to transaction was detected.
+            tx_pool.clear();
 
-                    match db.get::<BatchHeader>(b"last_batch_header") {
-                    Ok(Some(i)) => i.state_root,
-                    Ok(None) => H256::zero(),
-                    Err(e) => panic!("Could not start node. {:?}", e),
-                    }
-                }; 
+            println!("Cleared tx pool, before starting.");
 
-                match self.execute_batch(tx_pool[0].clone()).await {
-                    Ok(()) => (), 
-                    Err(e) => {
-                        println!("Reverting state machine due to error: {:?}", e);
-                        let mut state_machine = self.state_machine.lock().await;
+            let last_state_root: H256 = {
+                let db = self.db.lock().await;
 
-                        match state_machine.revert(last_state_root) {
-                            Ok(()) => (), 
-                            Err(_e) => panic!("Reverting state failed. Need to restart node."),
-                        };
-                    }
+                match db.get::<BatchHeader>(b"last_batch_header") {
+                Ok(Some(i)) => i.state_root,
+                Ok(None) => H256::zero(),
+                Err(e) => panic!("Could not start node. {:?}", e),
                 }
+            }; 
 
-                //TODO: Only remove if the transaction failed 
-                //due to state transition error. (or was successful)
-                tx_pool.remove(0);
-                continue;
+            let mut state_machine = self.state_machine.lock().await;
+
+            match state_machine.revert(last_state_root) {
+                Ok(()) => (),
+                //TODO: Need to restart the service on this error.
+                Err(e) => panic!("Reverting state failed. Need to restart node."),
+            };
+        }
+
+        loop {
+            {
+                let mut tx_pool = self.tx_pool.lock().await;
+
+                while !tx_pool.is_empty() {
+                    let last_state_root: H256 = {
+                        let db = self.db.lock().await;
+
+                        match db.get::<BatchHeader>(b"last_batch_header") {
+                        Ok(Some(i)) => i.state_root,
+                        Ok(None) => H256::zero(),
+                        Err(e) => panic!("Could not start node. {:?}", e),
+                        }
+                    }; 
+
+                    match self.execute_batch(tx_pool[0].clone()).await {
+                        Ok(()) => (), 
+                        Err(e) => {
+                            println!("Reverting state machine to root: {:?} due to error: {:?}", &last_state_root,e);
+                            let mut state_machine = self.state_machine.lock().await;
+
+                            match state_machine.revert(last_state_root) {
+                                Ok(()) => (),
+                                //TODO: Need to restart the service on this error.
+                                Err(e) => panic!("Reverting state failed. Need to restart node."),
+                            };
+                        }
+                    }
+
+                    //TODO: Only remove if the transaction failed 
+                    //due to state transition error. (or was successful)
+                    tx_pool.remove(0);
+                    continue;
+                }
             }
-
+            println!("Sleeping end of loop.");
             //Make this configurable.
             tokio::time::sleep(Duration::from_secs(10)).await;
         } 
@@ -159,7 +192,7 @@ impl<
             match &db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.batch_number,
             Ok(None) => 0,
-            Err(e) => panic!("Could not start node. {:?}", e),
+            Err(e) => return Err(anyhow!("Could not start node. {:?}", e)),
             }
         };
         //TODO: Add proper error handling below by removing unwrap and store last
@@ -198,7 +231,7 @@ impl<
             println!("Executed, cycles: {}k", cycles / 1024);
             let session_receipt = match session.prove() {
                 Ok(i) => i, 
-                Err(e) => {panic!("{:?}", e);}
+                Err(e) => return Err(anyhow!("{:?}", e))
             };
 
             println!("Session executed in zkvm with ID {:?}", &self.zkvm_id);
@@ -271,11 +304,11 @@ impl<
             200 => {
                 // Request was successful, handle the response here
                 let response_text = response.text().await?;
-                println!("Request successful. Response: {}", response_text);
+                println!("Batch submission successful. Response: {}", response_text);
             }
             _ => {
                 // Request failed
-                println!("Request failed with status code: {}", response.status());
+                println!("Batch submission failed with status code: {}", response.status());
 
                 return Err(anyhow!("Submit batch failed, will try to execute again."));
             }
@@ -312,15 +345,41 @@ impl<
     }
 
     pub async fn add_to_tx_pool(&self, tx: T) {
+        println!("Adding tx hash to pool: {:?}", tx.to_h256());
         let mut tx_pool = self.tx_pool.lock().await;
 
         tx_pool.push(tx)
+    }
+
+    pub async fn get_tx_status(&self, hash: H256) -> Result<String, Error> {
+        let mut tx_pool = self.tx_pool.lock().await;
+
+        for tx in tx_pool.iter() {
+            // Check if the hash of the current item matches the target hash
+            if tx.to_h256() == hash {
+                return Ok(String::from("tx_pool"));
+            }
+        }
+
+        let db = self.db.lock().await;
+        
+        match db.get::<T>(hash.as_slice()) {
+            Ok(Some(_i)) => return  Ok(String::from("finalized.")),
+            Ok(None) => return  Ok(String::from("dropped")),
+            Err(e) => return  Err(anyhow!("{:?}", e)),
+        }
     }
 
     pub async fn get_state_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error> {
         let state_machine = self.state_machine.lock().await;
 
         state_machine.get_state_with_proof(key)
+    }
+
+    pub async fn get_root(&self) -> Result<H256, Error> {
+        let state_machine = self.state_machine.lock().await;
+
+        state_machine.get_root()
     }
 }
 
@@ -329,34 +388,29 @@ pub struct StateQuery {
   key: String,
 }
 
-// async fn get_state_with_proof<V, T, S>(
-//     service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
-//     call: web::Query<StateQuery>,
-// ) -> impl Responder where
-// V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-// T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
-// S: StateMachine<V, T> + std::marker::Send,
-// {
-//     let app = service.lock().await;
-//     let deserialized_call: StateQuery = call.into_inner();
-//     let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
+pub async fn get_state_with_proof<V, T, S>(
+    service: Arc<Mutex<AppNode<V, T, S>>>,
+    query: String,
+) -> Result<ClientReply<(V, MerkleProof)>, Infallible> 
+where
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
+    S: StateMachine<V, T> + std::marker::Send,
+{
+    let app = service.lock().await;
+    let key: H256 = H256::from(match hex_string_to_u8_array(&query) {
+        Ok(i) => i,
+        Err(e) => return Ok(ClientReply::Error(e))
+    });
+    println!("key: {:?} {:?}", &query, &key);
     
-//     let state_with_proof = match app.get_state_with_proof(&key).await {
-//       Ok(i) => i,
-//       Err(_e) => return HttpResponse::InternalServerError().body("Internal error.")
-//     };
+    let state_with_proof = match app.get_state_with_proof(&key).await {
+      Ok(i) => i,
+      Err(e) => return Ok(ClientReply::Error(e))
+    };
     
-//     HttpResponse::Ok().json(state_with_proof)
-// }
-
-// pub fn with_service<V, T, S>(service: Arc<Mutex<AppNode<V, T, S>>>) ->  impl Filter<Extract = (Arc<Mutex<AppNode<V, T, S>>>), Error = Infallible> + Clone
-// where
-//     V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-//     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
-//     S: StateMachine<V, T> + std::marker::Send,
-// {
-//     warp::any().map(move || service.clone())
-// }
+    Ok(ClientReply::Ok(state_with_proof))
+}
 
 pub async fn api_handler<V, T, S>(
     service: Arc<Mutex<AppNode<V, T, S>>>,
@@ -366,7 +420,7 @@ where
     V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send,
-{
+{   
     let app = service.lock().await;
     println!("Adding transaction to pool.");
 
@@ -375,18 +429,49 @@ where
     Ok(ClientReply::Ok(String::from("Transaction added to batch.")))
 }
 
+pub async fn get_tx_status<V, T, S> (
+    service: Arc<Mutex<AppNode<V, T, S>>>,
+    call: H256,
+) -> Result<ClientReply<String>, Infallible>
+where
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
+    S: StateMachine<V, T> + std::marker::Send,
+{
+    let app = service.lock().await;
+
+    match app.get_tx_status(call).await {
+        Ok(i) => Ok(ClientReply::Ok(i)), 
+        Err(e) => Ok(ClientReply::Error(e)),
+    }
+}
+
 pub fn routes<V, T, S>(service: Arc<Mutex<AppNode<V, T, S>>>) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone 
 where
     V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
     T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send,
 {
+    let send_tx_app = service.clone();
+    let tx_status_app = service.clone();
+    let state_app = service.clone();
+
     let send_tx = warp::path!("tx")
-            .and(warp::any().map(move || service.clone()))
+            .and(warp::any().map(move || send_tx_app.clone()))
             .and(warp::body::json())
             .and_then(api_handler::<V, T, S>);
 
-    send_tx
+    let tx_status = warp::path!("tx_status")
+            .and(warp::any().map(move || tx_status_app.clone()))
+            .and(warp::body::json())
+            .and_then(get_tx_status::<V, T, S>);
+
+    let state_with_proof = warp::path("state")
+            .and(warp::any().map(move || state_app.clone()))
+            .and(warp::path::param::<String>())
+            .and_then(get_state_with_proof::<V, T, S>);
+
+    send_tx.or(tx_status).or(state_with_proof)
 }
 
 pub struct RPCServer<V, T, S> where 

@@ -3,7 +3,7 @@ use nft_core::{
     nft::types::{NftId, NftTransactionMessage, NftTransaction, Mint, NftMetadata}, 
     types::{TxSignature, Address}
 };
-use sparse_merkle_tree::H256;
+
 use serde::{ de::DeserializeOwned, Serialize, Deserialize};
 use primitive_types::U256;
 use reqwest::Error;
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Error>  {
     let metadata: NftMetadata = NftMetadata {
         url: String::from("https://storage.googleapis.com/nftimagebucket/tokens/0x60e4d786628fea6478f785a6d7e704777c86a7c6/preview/5933.png"),
         description: String::from("Demo NFT, not real."), 
-        name: String::from("Ape 1"),
+        name: String::from("Ape 3"),
     };
     let mut bytes = [0u8; 32];
     

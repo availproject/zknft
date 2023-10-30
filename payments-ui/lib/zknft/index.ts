@@ -1,6 +1,11 @@
 import * as ed from '@noble/ed25519';
 import { TransactionMessage, TransactionCall, $transactionMessage, $signature } from "./types";
 import { to_H256, to_H512, hexToAddress, byteArrayToHexString } from "./utils";
+import { bytesToHex } from 'web3-utils';
+const custodianAddress = [
+  110, 80, 211, 15, 198, 63, 39, 13, 44, 74, 228, 84, 127, 23, 174, 86,
+  128, 8, 98, 221, 246, 140, 222, 118, 13, 70, 1, 141, 19, 114, 90, 31,
+];
 
 export function setLocalStorage(key: string, value: any) {
   try {
@@ -21,40 +26,35 @@ export function getLocalStorage<T>(key: string): T | null {
   }
 }
 
-export async function getPrivateKey(): Promise<Uint8Array> {
+export function getPrivateKey(): Uint8Array {
   let seed = getLocalStorage("my-private-key")
-
   if (seed === null) {
     const privKey = ed.utils.randomPrivateKey();
 
     setLocalStorage("my-private-key", Array.from(privKey));
 
-    console.log(await ed.getPublicKeyAsync(privKey));
-
     return privKey;
   } else {
     const privateKey = new Uint8Array(seed as ArrayBufferLike);
-
+    console.log("returning private key.")
     return privateKey;
   }
 }
 
-export async function init(): Promise<void> {
-  const privateKey: Uint8Array = await getPrivateKey();
-  console.log("Got private keyyy.");
-  let publicKey: Uint8Array = await ed.getPublicKeyAsync(privateKey);
-  console.log("address: ", byteArrayToHexString(publicKey), byteArrayToHexString(publicKey).length)
+export async function getAddress(): Promise<string> {
+  console.log("public", await ed.getPublicKeyAsync(getPrivateKey()));
+  return bytesToHex(await ed.getPublicKeyAsync(getPrivateKey()));
 }
 
 export async function transfer(to: string, amount: bigint): Promise<void> {
-  const privateKey: Uint8Array = await getPrivateKey();
+  const privateKey: Uint8Array = getPrivateKey();
   console.log("Got private keyyy.");
 
   const transactionMessage: TransactionMessage = {
     from: to_H256(Array.from(await ed.getPublicKeyAsync(privateKey))),
     to: hexToAddress(to),
     amount: amount,
-    call_type: { CallType: "Mint" },
+    call_type: { CallType: "Transfer" },
     data: undefined,
   };
 
@@ -75,6 +75,7 @@ export async function transfer(to: string, amount: bigint): Promise<void> {
   const isValid = await ed.verifyAsync(signature, $transactionMessage.encode(transactionMessage), publicKey);
 
   console.log("tx is valid: ", isValid);
+  console.log("encoded tx: ", Array.from($transactionMessage.encode(transactionMessage)));
   const transaction: TransactionCall = {
     message: Array.from($transactionMessage.encode(transactionMessage)),
     signature: to_H512(Array.from(signature)),

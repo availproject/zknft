@@ -1,8 +1,8 @@
-use serde::{ de::DeserializeOwned, Serialize, Deserialize};
-use std::fs::File;
-use std::io::Write;
 
-fn main() -> () {
+
+
+
+fn main() {
     // let nexus_url = "http://127.0.0.1:8080/receipt";
     // let payments_url = "http://127.0.0.1:7001/";
     // let nft_url = "http://127.0.0.1:7000/";
@@ -21,7 +21,7 @@ fn main() -> () {
     // let mut file = File::create("keypair.json").unwrap();
     // file.write_all(serde_json::to_string_pretty(&json_data).unwrap().as_bytes()).unwrap();
 
-    ()
+    
 }
 
 

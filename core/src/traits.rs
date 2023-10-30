@@ -23,6 +23,7 @@ pub trait StateMachine<V, T: Clone + DeserializeOwned + Serialize + Encode + Dec
         key: &H256, 
     ) -> Result<(V, MerkleProof), Error>;
     fn revert(&mut self, root: H256) -> Result<(), Error>;
+    fn get_root(&self) -> Result<H256, Error>;
 }
 
 pub trait StateTransition<V, T> {

@@ -7,27 +7,32 @@ use crate::{
     types::{AggregatedBatch, StateUpdate, TransactionReceipt, Address},
 };
 use crate::db::NodeDB;
-
+use std::mem::swap;
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
 use anyhow::{Error, anyhow};
 
 pub struct NftStateMachine {
-    pub state: VmState<Nft>,
+    state: Option<VmState<Nft>>,
     stf: NftStateTransition,
     custodian: Option<Address>,
     db: NodeDB,
 }
 
 impl NftStateMachine {
-    pub fn register_custodian(&mut self, address: Address) -> () {
+    pub fn register_custodian(&mut self, address: Address) {
         println!("Registering custodian: {:?}", &address);
         self.custodian = Some(address);
     }
 
     pub fn get_listed_nfts(&self) -> Result<Vec<Nft>, Error> {
-        let mut listed_nft_ids: Vec<NftId> = match self.db.get(b"all_listed_nfts") {
+        let state = match &self.state {
+            None => return Err(anyhow!("Internal error, restart node.")), 
+            Some(i) => i,
+        };
+
+        let listed_nft_ids: Vec<NftId> = match self.db.get(b"all_listed_nfts") {
             Ok(Some(i)) => i,
             Ok(None) => vec![],
             Err(e) => return Err(anyhow!("Could not access db due to error: . {:?}", e)),
@@ -39,7 +44,7 @@ impl NftStateMachine {
         
         //Get latest state of all listed nfts.
         for id in &listed_nft_ids {
-            match self.state.get(&id.get_key()) {
+            match state.get(&id.get_key()) {
                 Ok(Some(i)) => { listed_nfts.push(i) }, 
                 Ok(None) => (), 
                 Err(e) => return Err(anyhow!("Could not get nft from db: {:?}", e)),
@@ -58,7 +63,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         let node_db = NodeDB::from_path(String::from("./marketplace_db"));
         
         NftStateMachine {
-            state,
+            state: Some(state),
             stf: NftStateTransition::new(),
             custodian: None,
             db: node_db,
@@ -70,6 +75,10 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         params: NftTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<Nft>, TransactionReceipt), Error> {
+        let state: &mut VmState<Nft> = match &mut self.state {
+            None => return Err(anyhow!("Internal error, restart node.")), 
+            Some(i) => i,
+        };
         let message: NftTransactionMessage = NftTransactionMessage::try_from(params.clone())?;
 
         let nft_id = match message {
@@ -82,7 +91,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
 
         println!("{:?}", &nft_key);
 
-        let nft = match self.state.get(&nft_key) {
+        let nft = match state.get(&nft_key) {
             Ok(Some(i)) => i,
             Err(e) => return Err(e),
             Ok(None) => Nft::zero(),
@@ -95,7 +104,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
 
         let updated_set = result.0;
 
-        let (update, receipt) = match self.state.update_set(updated_set.clone()) {
+        let (update, receipt) = match state.update_set(updated_set.clone()) {
             Ok(i) => (i, result.1),
             Err(e) => return Err(e),
         };
@@ -154,12 +163,42 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
         &self, 
         key: &H256, 
     ) -> Result<(Nft, MerkleProof), Error> {
-        self.state.get_with_proof(key)
+        let state = match &self.state {
+            None => return Err(anyhow!("Internal error, restart node.")), 
+            Some(i) => i,
+        };
+
+        state.get_with_proof(key)
     }
 
     fn revert(&mut self, root: H256) -> Result<(), Error> {
-        self.state = VmState::new(root);
+        let old_state = std::mem::take(&mut self.state);
 
+        // Check if there was a previous state to work with
+        if let Some(old_state) = old_state {
+            // Perform the revert operation on the old state
+            let new_state = old_state.revert(root);
+            
+            // Assign the new state back to self.state
+            self.state = Some(new_state);
+        } else {
+            // Handle the case where there was no old state
+            return Err(anyhow!("No previous state available. Need to restart."));
+        }
+
+        let root: H256 = match &self.state {
+            Some(i) => i.get_root(), 
+            None => H256::zero(),
+        };
+
+        println!("current root {:?}", &root);
         Ok(())
+    }
+
+    fn get_root(&self) -> Result<H256, Error> {
+        match &self.state {
+            Some(i) => Ok(i.get_root()), 
+            None => Err(anyhow!("Critical error, tree state missing.")),
+        }
     }
 }

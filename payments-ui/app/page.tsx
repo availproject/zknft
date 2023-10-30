@@ -1,37 +1,66 @@
 'use client';
 import Image from 'next/image';
-import { transfer, init } from 'lib/zknft';
+import { transfer, getAddress } from 'lib/zknft';
 import React, { useState, ChangeEvent } from 'react';
+// import Font Awesome CSS
+import "@fortawesome/fontawesome-svg-core/styles.css";
+import { config } from "@fortawesome/fontawesome-svg-core";
+// Tell Font Awesome to skip adding the CSS automatically 
+// since it's already imported above
+config.autoAddCss = false;
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faUser,
+  faCopy,
+} from "@fortawesome/free-solid-svg-icons";
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
-  const [amount, setAmount] = useState(0);
+  const [amount, setAmount] = useState<null | number>(null);
   const [to, setTo] = useState('');
   const [amountOk, setAmountOk] = useState(false);
   const [toOk, setToOk] = useState(false);
+  const [myValue, setMyValue] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const router = useRouter();
 
   const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
     const amount = parseInt(event.target.value);
     setAmount(parseInt(event.target.value));
 
-    if (amount != 0) {
+    if (amount != 0 || amount != null) {
       setAmountOk(true)
     }
   };
+
   const handleToChange = (event: ChangeEvent<HTMLInputElement>) => {
     const to = event.target.value.toLowerCase();
     setTo(to);
 
-    if (to !== '' && to.length === 64) {
+    if (to !== '' && (to.length === 64 || to.length === 66)) {
       setToOk(true);
     }
   };
 
   const handleSend = () => {
+    console.log(amountOk, toOk);
     if (!amountOk || !toOk) {
       return;
     }
 
-    transfer(to, BigInt(amount)).then(() => { });
+    transfer(to, BigInt(amount as number)).then(() => { });
+  };
+
+  const handleCopyClick = () => {
+    if (myValue) {
+      navigator.clipboard.writeText(myValue);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000); // Reset copied state after 3 seconds
+    }
+  };
+
+  const handleLoadClick = async () => {
+    setMyValue(await getAddress());
   };
 
   return (
@@ -59,7 +88,36 @@ export default function Home() {
           </a>
         </div>
       </div>
-      <div className="w-[560px] h-[300px] flex flex-col justify-center before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:h-[180px] after:w-[240px] after:translate-x-2/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px]">
+      <div className="mt-8 w-full max-w-2xl">
+        <p className="flex min-w-full justify-between border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:w-auto lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
+          <span className="flex items-center">
+            <FontAwesomeIcon
+              className="mr-2"
+              icon={faUser}
+              style={{ fontSize: 14, color: "white" }}
+            />
+            {myValue ? (
+              <code className="font-mono text-xs font-bold">{myValue}</code>
+            ) : (
+              ''
+            )}
+          </span>
+          {myValue ? (
+            <button onClick={handleCopyClick} className="bg-transparent hover:bg-gray-900 text-white font-semibold py-2 px-4 border border-gray-700 rounded shadow disabled:bg-gray-900 disabled:cursor-not-allowed">
+              {copied ? 'Copied!' : <FontAwesomeIcon
+                icon={faCopy}
+                style={{ fontSize: 14, color: "white" }}
+              />}
+            </button>
+          ) : (
+            <button onClick={handleLoadClick} className="w-[200px] bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2 px-4  rounded shadow disabled:bg-gray-900 disabled:cursor-not-allowed">
+              Load account
+            </button>
+          )}
+        </p>
+      </div>
+
+      <div className="w-[560px] h-[200px] flex flex-col justify-center before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:h-[180px] after:w-[240px] after:translate-x-2/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[250px]">
         <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full">
           <h2 className={`mb-3 text-2xl font-semibold`}>
             Send money now!
@@ -72,10 +130,9 @@ export default function Home() {
             name="transfer-to"
             placeholder="abcd..."
             autoComplete="off"
-            defaultValue={''}
             value={to}
             onChange={handleToChange}
-            className="w-max-[560px] relative w-full lg:w-160 xl:w-full rounded-lg border bg-white px-4 py-2 text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
+            className="w-full text-ellipsis overflow-hidden text-xs relative rounded-lg border bg-white pl-4 pr-8 py-2  text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
           />
           <div className="absolute right-0 top-0 mr-3 flex h-full items-center">
             To
@@ -85,10 +142,9 @@ export default function Home() {
           <input
             type="number"
             name="amount"
-            placeholder="500"
             autoComplete="off"
-            defaultValue={''}
-            value={amount}
+            placeholder="not all your money."
+            value={amount as number}
             onChange={handleAmountChange}
             className="w-max-[560px] relative w-full lg:w-160 xl:w-full rounded-lg border bg-white px-4 py-2 text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
           />

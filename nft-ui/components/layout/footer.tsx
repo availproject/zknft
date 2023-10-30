@@ -5,7 +5,6 @@ import LogoSquare from 'components/logo-square';
 import { getMenu } from 'lib/zknft';
 import { MenuType } from 'lib/zknft/types';
 import { Suspense } from 'react';
-import { sendTx } from 'lib/zknft';
 
 const { COMPANY_NAME, SITE_NAME } = process.env;
 
@@ -15,9 +14,6 @@ export default async function Footer() {
   const skeleton = 'w-full h-6 animate-pulse rounded bg-neutral-200 dark:bg-neutral-700';
   const menu = await getMenu(MenuType.footer);
   const copyrightName = COMPANY_NAME || SITE_NAME || '';
-  const sendTxNow = async () => {
-    await sendTx()
-  };
 
   return (
     <footer className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -46,7 +42,6 @@ export default async function Footer() {
           <a
             className="flex h-8 w-max flex-none items-center justify-center rounded-md border border-neutral-200 bg-white text-xs text-black dark:border-neutral-700 dark:bg-black dark:text-white"
             aria-label="Deploy on Vercel"
-            onClick={sendTxNow}
           >
             <span className="px-3">▲</span>
             <hr className="h-full border-r border-neutral-200 dark:border-neutral-700" />

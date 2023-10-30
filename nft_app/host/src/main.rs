@@ -1,4 +1,5 @@
 mod rpc_endpoints;
+mod types;
 use nft_core::{
     nft::{
         state_machine::NftStateMachine,
@@ -11,15 +12,16 @@ use nft_core::{
 use nft_methods::{TRANSFER_ELF, TRANSFER_ID};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use sparse_merkle_tree::H256;
+
 use crate::rpc_endpoints::nft_routes;
 use ed25519_consensus::{SigningKey};
+use ed25519_consensus::Signature;
 use warp::Filter;
 use warp::Rejection;
 use warp::http::StatusCode;
 use warp::Reply;
 use std::convert::Infallible;
-use serde::{ de::DeserializeOwned, Serialize, Deserialize};
+use serde::{ Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Data {
@@ -54,19 +56,51 @@ fn main() {
         state_machine.register_custodian(verifying_key);
     });
 
-    let app_clone = app.clone();
     rt.block_on(async move {
-        tokio::spawn(async move { app.run().await });
+        let app_clone = app.clone();
+        let execution_engine = tokio::spawn(async move {
+            loop {
+                let execution_app = app.clone();
+                let execution = tokio::spawn(async move {execution_app.run().await;});
+
+                let result = tokio::try_join!(
+                    execution,
+                );
+            
+                match result {
+                    Ok(_) => {
+                        println!("Thread completed successfully.");
+                    }
+                    Err(e) => {
+                        println!("Thread failed due to panic. restarting node. {:?}", e);
+                    }
+                }
+            }
+        });
 
         let mutex_app = Arc::new(Mutex::new(app_clone.clone()));
-        let nft_routes = routes(mutex_app.clone()).or(nft_routes(mutex_app.clone()));
+        let nft_routes = routes(mutex_app.clone()).or(nft_routes(mutex_app.clone(), signing_key));
         let cors = warp::cors()
         .allow_any_origin()
         .allow_methods(vec!["GET", "POST", "DELETE"])
         .allow_headers(vec!["content-type"]);
 
-        let routes = nft_routes.with(cors).recover(handle_rejection);
-        RPCServer::new(mutex_app, String::from("127.0.0.1"), 7000).run(routes).await;
+        let routes = nft_routes.with(cors);
+        let rpc = tokio::spawn(async move {  RPCServer::new(mutex_app, String::from("127.0.0.1"), 7000).run(routes).await; });
+
+        let result = tokio::try_join!(
+            execution_engine,
+            rpc,
+        );
+    
+        match result {
+            Ok((_, _)) => {
+                println!("Exiting node, should not have happened.");
+            }
+            Err(e) => {
+                println!("Exiting node, should not have happened.");
+            }
+        }
     });
 }
 
@@ -76,24 +110,24 @@ pub struct ErrorMessage {
     message: String,
 }
 
-async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
-    let mut code = StatusCode::OK;
-    let mut message = "OK";
+// async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+//     let mut code = StatusCode::OK;
+//     let mut message = "OK";
 
-    println!("{:?}", &err);
+//     println!("ERRR: {:?}", &err);
 
-    if err.is_not_found() {
-        code = StatusCode::NOT_FOUND;
-        message = "NOT_FOUND";
-    } else if let Some(ClientReply) = err.find::<ClientReply<String>>() {
-        code = StatusCode::BAD_REQUEST;
-        message = "BAD_REQUEST";
-    }
+//     if err.is_not_found() {
+//         code = StatusCode::NOT_FOUND;
+//         message = "NOT_FOUND";
+//     } else {
+//         code = StatusCode::BAD_REQUEST;
+//         message = "BAD_REQUEST";
+//     }
 
-    let json = warp::reply::json(&ErrorMessage {
-        code: code.as_u16(),
-        message: message.into(),
-    });
+//     let json = warp::reply::json(&ErrorMessage {
+//         code: code.as_u16(),
+//         message: message.into(),
+//     });
 
-    Ok(warp::reply::with_status(json, code))
-}
+//     Ok(warp::reply::with_status(json, code))
+// }

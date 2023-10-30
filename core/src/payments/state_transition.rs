@@ -7,7 +7,7 @@ use crate::{
     types::{AggregatedBatch, TransactionReceipt, Address},
 };
 use sparse_merkle_tree::traits::Value;
-use sparse_merkle_tree::H256;
+
 use anyhow::{Error, anyhow};
 
 pub struct PaymentsStateTransition {
@@ -27,6 +27,9 @@ impl PaymentsStateTransition {
         params: TransactionMessage,
         pre_state: Vec<Account>,
     ) -> Result<(Vec<Account>, TransactionReceipt), Error> {
+        #[cfg(any(feature = "native", feature = "native-metal"))]
+        println!("\n Executing following transaction: {:?} \n", &params);
+
         let mut from_account: Account = match pre_state[0].clone() {
             i if i == Account::zero() => Account {
                 address: params.from.clone(),
@@ -35,6 +38,8 @@ impl PaymentsStateTransition {
             },
             i => i,
         };
+
+        println!("{:?}", from_account);
 
         if from_account.balance < params.amount {
             return Err(anyhow!("not enough balance."))

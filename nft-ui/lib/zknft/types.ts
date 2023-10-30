@@ -5,8 +5,8 @@ export type H256 = [number, number, number, number, number, number, number, numb
 export type H512 = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number,]
 
 export type NFTResponseObject = {
-  id: string,
-  owner: [number],
+  id: number[],
+  owner: number[],
   future?: string,
   nonce: number,
   metadata: {
@@ -17,7 +17,7 @@ export type NFTResponseObject = {
 }
 
 export type NFT = {
-  id: string,
+  id: number[],
   owner: number[],
   future?: string,
   nonce: number,
@@ -94,6 +94,12 @@ export interface TransactionReceipt {
 
 }
 
+export interface BuyNftQuery {
+  nft_id: string,
+  payment_sender: string,
+  nft_receiver: string,
+}
+
 export interface MerkleProof {
   // leaf bitmap, bitmap.get_bit(height) is true means there need a non zero sibling in this height
   leaves_bitmap: H256[],
@@ -160,3 +166,35 @@ export const $transactionMessage: Shape<NftTransactionMessage> = scale.taggedUni
   scale.variant("Mint", $mint),
   scale.variant("Burn", $burn)
 ]);
+
+// export const $buyNft: Shape<BuyNftQuery> = scale.object(
+//   scale.field("nft_id", scale.sizedArray(scale.u8, 32)),
+//   scale.field("payment_sender", scale.sizedArray(scale.u8, 32)),
+//   scale.field("payment_expected_nonce", scale.u64),
+//   scale.field("nft_receiver", scale.sizedArray(scale.u8, 32)),
+// )
+
+
+//Payment types 
+
+export type CallType = { readonly CallType: "Transfer"; } | { readonly CallType: "Mint"; };
+
+export interface TransactionMessage {
+  from: H256;
+  to: H256;
+  amount: bigint;
+  call_type: CallType;
+  data: string | undefined;
+}
+
+export const $payTransactionMessage: Shape<TransactionMessage> = scale.object(
+  scale.field("from", $address),
+  scale.field("to", $address),
+  scale.field("amount", scale.u64),
+  scale.field("call_type", scale.taggedUnion(
+    "CallType", [
+    scale.variant("Transfer"),
+    scale.variant("Mint")
+  ])),
+  scale.field("data", scale.option(scale.str))
+);

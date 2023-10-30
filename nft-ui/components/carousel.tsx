@@ -1,10 +1,11 @@
-import { getForSaleNFTs } from 'lib/zknft';
+'use client';
 import Link from 'next/link';
 import { GridTileImage } from './grid/tile';
+import { NFT } from 'lib/zknft/types';
 
-export async function Carousel() {
+export async function Carousel({ nfts }: { nfts: NFT[] }) {
   // Collections that start with `hidden-*` are hidden from the search page.
-  const products = await getForSaleNFTs();
+  const products = nfts;
 
   if (!products?.length) return null;
 

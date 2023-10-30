@@ -25,11 +25,11 @@ impl NftStateTransition {
         pre_state: Nft,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state == Nft::zero() {
-            panic!("NFT not minted.");
+            return Err(anyhow!("NFT not minted."));
         }
 
         if pre_state.owner != params.from {
-            panic!("Not owner");
+            return Err(anyhow!("Not owner"));
         }
 
         let updated_nonce = pre_state.nonce + 1;
@@ -84,7 +84,7 @@ impl NftStateTransition {
 
     fn mint(&self, params: Mint, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state != Nft::zero() {
-            panic!("Already minted, {:?}", pre_state);
+            return Err(anyhow!("Already minted, {:?}", pre_state));
         }
 
         match params.future_commitment {
@@ -137,11 +137,11 @@ impl NftStateTransition {
 
     fn burn(&self, params: Burn, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state == Nft::zero() {
-            panic!("Nft does not exist");
+            return Err(anyhow!("Nft does not exist"));
         }
 
         if pre_state.owner != params.from {
-            panic!("Not owner")
+            return Err(anyhow!("Not owner"))
         }
 
         let updated_nonce = pre_state.nonce + 1;
@@ -201,11 +201,11 @@ impl NftStateTransition {
         aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state == Nft::zero() {
-            panic!("Nft does not exist.");
+            return Err(anyhow!("Nft does not exist."));
         }
 
         let future = match pre_state.future {
-            None => panic!("No future registered."),
+            None => return Err(anyhow!("No future registered.")),
             Some(i) => i,
         };
 
@@ -215,8 +215,8 @@ impl NftStateTransition {
             vec![(future.commitment, params.receipt.to_h256())],
         ) {
             Ok(true) => (),
-            Ok(false) => panic!("Invalid merkle proof."),
-            Err(_e) => panic!("Error while verifying merkle"),
+            Ok(false) => return Err(anyhow!("Invalid merkle proof.")),
+            Err(_e) => return Err(anyhow!("Error while verifying merkle")),
         }
 
         let updated_nonce = pre_state.nonce + 1;
