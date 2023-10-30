@@ -31,12 +31,12 @@ impl MerkleStore {
     }
 
     pub fn get<V: DeserializeOwned>(&self, serialized_key: &[u8]) -> Result<Option<V>, Error> {
-        
-
         match self.db.get(serialized_key) {
             Err(e) => Err(Error::Store(e.to_string())),
             Ok(None) => Ok(None),
-            Ok(Some(i)) => Ok(from_slice::<Option<V>>(&i).unwrap()),
+            Ok(Some(i)) => {
+                Ok(from_slice::<Option<V>>(&i).unwrap())
+            },
         }
     }
 

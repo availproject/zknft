@@ -1,21 +1,14 @@
 
 use nft_core::{
-    nft::types::{NftId, NftTransactionMessage, NftTransaction, Mint}, 
-    types::{TxSignature, Address}
+    types::{TxSignature, Address}, 
+    payments::types::{TransactionMessage, Transaction, CallType},
+    utils::hex_string_to_u8_array,
 };
-use sparse_merkle_tree::H256;
-
-
 use serde::{ de::DeserializeOwned, Serialize, Deserialize};
-use primitive_types::U256;
-
-
-
-use reqwest::Error;
-
-
 use ed25519_consensus::{Signature, SigningKey};
-
+use sparse_merkle_tree::H256;
+use primitive_types::U256;
+use anyhow::Error;
 use sha2::Digest;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -25,35 +18,40 @@ struct Data {
 
 #[tokio::main]
 async fn main() -> Result<(), Error>  {
-  let json_data = std::fs::read_to_string("keypair.json").unwrap();
-  let nft_url = "http://127.0.0.1:7000/";
-  // Deserialize the JSON data into a struct
-  let keypair_data: Data = serde_json::from_str(&json_data).unwrap();
+    let mint_to = String::from("0x41083dfd36361213d4e08e4002115f4e83d92b4e2bbc952fbcf56d2a2903eebb");
+    let json_data = std::fs::read_to_string("keypair.json").unwrap();
+    let payments_url = "http://127.0.0.1:7001/tx";
 
-  // Create a SigningKey from the deserialized keypair_bytes
-  let signing_key: SigningKey = SigningKey::from(keypair_data.keypair_bytes);
-  
-    let mint = Mint {
-        id: NftId(U256::from_dec_str("2").unwrap()),
-        from: Address(H256::from(signing_key.verification_key().to_bytes())),
-        to: Address(H256::from(signing_key.verification_key().to_bytes())), 
+    // Deserialize the JSON data into a struct
+    let keypair_data: Data = serde_json::from_str(&json_data).unwrap();
+    // Create a SigningKey from the deserialized keypair_bytes
+    let signing_key: SigningKey = SigningKey::from(keypair_data.keypair_bytes);
+    let address: Address = Address(signing_key.verification_key().to_bytes());
+    let to: Address = Address(hex_string_to_u8_array(&mint_to)?);
+
+    println!("Address: {:?}", &to);
+    let transaction_message: TransactionMessage = TransactionMessage {
+        from: address.clone(), 
+        to: to.clone(),
+        amount: 1000, 
+        call_type: CallType::Mint, 
         data: None,
-        future_commitment: None
     };
-    let nft_tx = NftTransactionMessage::Mint(mint.clone());
 
-    let signature: Signature = signing_key.sign(&nft_tx.to_vec());
+    let encoded_message = transaction_message.to_encoded();
 
-    match mint.from.verify_msg(&TxSignature::from(signature), &nft_tx.to_vec())
+    let signature: Signature = signing_key.sign(&encoded_message);
+
+    match transaction_message.from.verify_msg(&TxSignature::from(signature), &encoded_message)
     {
         true => { println!("Verification done")},
         false => { println!("Verification failed.")},
     };
 
     send_post_request(
-        nft_url, 
-        NftTransaction {
-            message: nft_tx,
+        payments_url, 
+        Transaction {
+            message: encoded_message,
             signature: TxSignature::from(signature)
         }
     ).await?;

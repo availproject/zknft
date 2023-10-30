@@ -25,11 +25,11 @@ impl NftStateTransition {
         pre_state: Nft,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state == Nft::zero() {
-            panic!("NFT not minted.");
+            return Err(anyhow!("NFT not minted."));
         }
 
         if pre_state.owner != params.from {
-            panic!("Not owner");
+            return Err(anyhow!("Not owner"));
         }
 
         let updated_nonce = pre_state.nonce + 1;
@@ -41,6 +41,7 @@ impl NftStateTransition {
                     owner: params.to.clone(),
                     nonce: updated_nonce,
                     future: None,
+                    metadata: pre_state.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -51,7 +52,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
             Some(i) => Ok((
@@ -62,6 +63,7 @@ impl NftStateTransition {
                         to: params.to.clone(),
                         commitment: i,
                     }),
+                    metadata: pre_state.metadata,
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
@@ -74,7 +76,7 @@ impl NftStateTransition {
                         nonce: updated_nonce,
                         future_commitment: i,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
         }
@@ -82,7 +84,7 @@ impl NftStateTransition {
 
     fn mint(&self, params: Mint, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state != Nft::zero() {
-            panic!("Already minted, {:?}", pre_state);
+            return Err(anyhow!("Already minted, {:?}", pre_state));
         }
 
         match params.future_commitment {
@@ -92,6 +94,7 @@ impl NftStateTransition {
                     owner: params.to.clone(),
                     nonce: 1,
                     future: None,
+                    metadata: params.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -102,7 +105,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: 1,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
             Some(i) => Ok((
@@ -114,6 +117,7 @@ impl NftStateTransition {
                         to: params.to.clone(),
                         commitment: i,
                     }),
+                    metadata: params.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -125,7 +129,7 @@ impl NftStateTransition {
                         nonce: 1,
                         future_commitment: i,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
         }
@@ -133,11 +137,11 @@ impl NftStateTransition {
 
     fn burn(&self, params: Burn, pre_state: Nft) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state == Nft::zero() {
-            panic!("Nft does not exist");
+            return Err(anyhow!("Nft does not exist"));
         }
 
         if pre_state.owner != params.from {
-            panic!("Not owner")
+            return Err(anyhow!("Not owner"))
         }
 
         let updated_nonce = pre_state.nonce + 1;
@@ -149,6 +153,7 @@ impl NftStateTransition {
                     owner: Address::zero(),
                     nonce: updated_nonce,
                     future: None,
+                    metadata: pre_state.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -159,7 +164,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
             Some(i) => Ok((
@@ -170,6 +175,7 @@ impl NftStateTransition {
                         to: Address::zero(),
                         commitment: i,
                     }),
+                    metadata: pre_state.metadata,
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
@@ -182,7 +188,7 @@ impl NftStateTransition {
                         nonce: updated_nonce,
                         future_commitment: i,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             )),
         }
@@ -195,11 +201,11 @@ impl NftStateTransition {
         aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
         if pre_state == Nft::zero() {
-            panic!("Nft does not exist.");
+            return Err(anyhow!("Nft does not exist."));
         }
 
         let future = match pre_state.future {
-            None => panic!("No future registered."),
+            None => return Err(anyhow!("No future registered.")),
             Some(i) => i,
         };
 
@@ -209,8 +215,8 @@ impl NftStateTransition {
             vec![(future.commitment, params.receipt.to_h256())],
         ) {
             Ok(true) => (),
-            Ok(false) => panic!("Invalid merkle proof."),
-            Err(_e) => panic!("Error while verifying merkle"),
+            Ok(false) => return Err(anyhow!("Invalid merkle proof.")),
+            Err(_e) => return Err(anyhow!("Error while verifying merkle")),
         }
 
         let updated_nonce = pre_state.nonce + 1;
@@ -223,6 +229,7 @@ impl NftStateTransition {
                     id: params.id.clone(),
                     owner: pre_state.owner.clone(),
                     future: None,
+                    metadata: pre_state.metadata,
                     nonce: updated_nonce,
                 }],
                 TransactionReceipt {
@@ -234,7 +241,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             ))
         } else {
@@ -244,6 +251,7 @@ impl NftStateTransition {
                     owner: future.to.clone(),
                     future: None,
                     nonce: updated_nonce,
+                    metadata: pre_state.metadata,
                 }],
                 TransactionReceipt {
                     chain_id: 7000,
@@ -254,7 +262,7 @@ impl NftStateTransition {
                         data: params.data,
                         nonce: updated_nonce,
                     })
-                    .to_vec(),
+                    .to_encoded(),
                 },
             ))
         }
@@ -268,17 +276,19 @@ impl StateTransition<Nft, NftTransaction> for NftStateTransition {
         params: NftTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(Vec<Nft>, TransactionReceipt), Error> {
-        match { match params.message.clone() {
-            NftTransactionMessage::Transfer(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
-            NftTransactionMessage::Mint(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
-            NftTransactionMessage::Burn(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
-            NftTransactionMessage::Trigger(i) => i.from.verify_msg(&params.signature, &params.message.clone().to_vec()),
+        let message: NftTransactionMessage = NftTransactionMessage::try_from(params.clone())?;
+
+        match { match message.clone() {
+            NftTransactionMessage::Transfer(i) => i.from.verify_msg(&params.signature, &params.message),
+            NftTransactionMessage::Mint(i) => i.from.verify_msg(&params.signature, &params.message),
+            NftTransactionMessage::Burn(i) => i.from.verify_msg(&params.signature, &params.message),
+            NftTransactionMessage::Trigger(i) => i.from.verify_msg(&params.signature, &params.message),
         } } {
             true => (),
             false => return Err(anyhow!("Signature verification failed.")),
         };
 
-        match params.message {
+        match message {
             NftTransactionMessage::Transfer(i) => self.transfer(i, pre_state[0].clone()),
             NftTransactionMessage::Mint(i) => self.mint(i, pre_state[0].clone()),
             NftTransactionMessage::Burn(i) => self.burn(i, pre_state[0].clone()),

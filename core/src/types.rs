@@ -1,4 +1,7 @@
-use crate::traits::Leaf;
+use crate::{
+    traits::Leaf, 
+    utils::hex_string_to_u8_array
+};
 use risc0_zkvm::sha::rust_crypto::{Digest, Sha256};
 #[cfg(any(feature = "native", feature = "native-metal"))]
 use risc0_zkvm::Receipt;
@@ -7,13 +10,16 @@ use sparse_merkle_tree::{
     traits::{Hasher, Value},
     MerkleProof, H256,
 };
-use ed25519_consensus::Signature;
+
+use parity_scale_codec::{Encode, Decode};
 use ed25519_consensus::VerificationKey;
+use ed25519_consensus::Signature;
 use serde_big_array::BigArray;
+
 #[cfg(any(feature = "native", feature = "native-metal"))]
-use std::marker::PhantomData;
-#[cfg(any(feature = "native", feature = "native-metal"))]
-use actix_web::{Responder, FromRequest, Handler};
+use http::status::StatusCode;
+use std::convert::TryFrom;
+use anyhow::{anyhow, Error};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -34,6 +40,7 @@ impl Hasher for ShaHasher {
 
     fn finish(self) -> H256 {
         let bytes = self.0.finalize();
+        //TODO: Check if unwrap could be removed.
         let sha2_array: [u8; 32] = bytes.as_slice().try_into().unwrap();
         H256::from(sha2_array)
     }
@@ -98,23 +105,19 @@ pub struct TransactionWithReceipt<T> {
     pub receipt: TransactionReceipt,
 }
 
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Default, Encode, Decode)]
 pub struct TransactionReceipt {
     pub chain_id: u64,
     pub data: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct TxSignature (
     #[serde(with = "BigArray")]
     [u8; 64]
 );
 
 impl TxSignature {
-    pub fn from(s: Signature) -> Self {
-        Self (s.to_bytes())
-    }
-
     pub fn as_bytes(&self) -> &[u8; 64] {
         &self.0
     }
@@ -124,26 +127,61 @@ impl TxSignature {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
-pub struct Address(pub H256);
+impl From<[u8; 64]> for TxSignature {
+    fn from(value: [u8; 64]) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Signature> for TxSignature {
+    fn from(s: Signature) -> Self {
+        Self (s.to_bytes())
+    }
+}
+
+impl TryFrom<&String> for TxSignature {
+    type Error = anyhow::Error;
+
+    fn try_from(s: &String) -> Result<Self, Self::Error> {
+        // Parse the hexadecimal string into a [u8; 64]
+        let bytes = hex::decode(s)?;
+
+        if bytes.len() != 64 {
+            return Err(anyhow!("Hexadecimal string must represent exactly 32 bytes"));
+        }
+    
+        let mut array = [0u8; 64];
+        array.copy_from_slice(&bytes);
+    
+
+        // Attempt to convert the bytes into a TxSignature
+        Ok(TxSignature(array))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default, Encode, Decode)]
+pub struct Address(pub [u8; 32]);
 
 impl Address {
-    pub fn verification_key(&self) -> VerificationKey {
+    pub fn verification_key(&self) -> Result<VerificationKey, Error> {
         let mut key: [u8; 32] = Default::default();
         let public_key = self.0.as_slice();
 
         key.copy_from_slice(public_key);
 
         //TODO: Better error handling.
-        VerificationKey::try_from(key).unwrap()
+        Ok(VerificationKey::try_from(key)?)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0 == H256::zero()
+        self.0 == [0; 32]
     }
 
     pub fn verify_msg(&self, sig: &TxSignature, msg: &[u8]) -> bool {
-        let verification_key = self.verification_key();
+        let verification_key = match self.verification_key() {
+            Ok(i) => i, 
+            Err(_e) => return false,
+        };
 
         //TODO: Return error instead.
         match verification_key.verify(&sig.as_signature(), msg) {
@@ -153,11 +191,31 @@ impl Address {
     }
 
     pub fn get_key(&self) -> H256 {
-        self.0
+        H256::from(self.0)
     }
 
     pub fn zero() -> Self {
-        Self(H256::zero())
+        Self([0; 32])
+    }
+}
+
+#[cfg(any(feature = "native", feature = "native-metal"))]
+impl TryFrom<&String> for Address {
+    type Error = anyhow::Error;
+
+    fn try_from(hex_string: &String) -> Result<Self, Self::Error> {
+        let address_array: [u8; 32] = match hex_string_to_u8_array(hex_string) {
+            Ok(i) => i, 
+            Err(e) => return Err(e),
+        };
+
+        Ok(Self(address_array))
+    }
+}
+
+impl TransactionReceipt {
+    pub fn to_encoded(&self) -> Vec<u8> {
+        self.encode()
     }
 }
 
@@ -168,7 +226,7 @@ impl Value for TransactionReceipt {
         }
 
         let mut hasher = ShaHasher::new();
-        let serialized = bincode::serialize(&self).unwrap();
+        let serialized = self.to_encoded();
         hasher.0.update(&serialized);
 
         hasher.finish()
@@ -215,39 +273,28 @@ pub struct SubmitProofParam {
 }
 
 #[cfg(any(feature = "native", feature = "native-metal"))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg(any(feature = "native", feature = "native-metal"))]
-pub struct RPCMethod
-< 
-    F: Handler<Args> + std::marker::Send + Clone, 
-    Args: FromRequest + 'static + std::marker::Send
-> (pub String,pub F, PhantomData<Args>)
-where 
-F::Output: Responder + 'static,;
-
-#[cfg(any(feature = "native", feature = "native-metal"))]
-impl
-< 
-    F: Handler<Args> + std::marker::Send + Clone, 
-    Args: FromRequest + 'static + std::marker::Send
-> 
-RPCMethod <F, Args>
-where 
-F::Output: Responder + 'static,
-{
-    pub fn new(path: String, method: F) -> Self {
-        Self(path, method, PhantomData)
-    }
+#[derive(Debug)]
+pub enum ClientReply<T: Serialize> {
+    Ok(T), 
+    Error(anyhow::Error), 
+    BadRequest,
 }
-
 #[cfg(any(feature = "native", feature = "native-metal"))]
-impl<F, Args> Clone for RPCMethod<F, Args>
-where
-    F: Handler<Args> + std::marker::Send + Clone, 
-    Args: FromRequest + 'static + std::marker::Send,
-    F::Output: Responder + 'static
-{
-    fn clone(&self) -> Self {
-        Self (self.0.clone(), self.1.clone(), self.2)
+impl <T: Send + Serialize> warp::Reply for ClientReply<T> {
+    fn into_response(self) -> warp::reply::Response {
+        match self {
+            ClientReply::Ok(i) => warp::reply::with_status(
+                    warp::reply::json(&i), 
+                    StatusCode::OK,
+            ).into_response(), 
+            ClientReply::Error(e) => warp::reply::with_status(
+				warp::reply::json(&e.to_string()),
+				StatusCode::INTERNAL_SERVER_ERROR,
+            ).into_response(),
+            ClientReply::BadRequest => warp::reply::with_status(
+				warp::reply::json(&"Bad Request".to_owned()),
+				StatusCode::BAD_REQUEST,
+            ).into_response(),
+        }
     }
 }

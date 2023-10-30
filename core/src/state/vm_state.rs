@@ -53,6 +53,14 @@ impl<
         }
     }
 
+    pub fn revert(self, root: H256) -> Self {
+        let store: MerkleStore = self.tree.take_store();
+
+        VmState {
+            tree: SparseMerkleTree::new(root, store),
+        }
+    }
+
     pub fn update_set(&mut self, set: Vec<V>) -> Result<StateUpdate<V>, Error> {
         let pre_state_root = self.get_root();
         let pre_merkle_proof = self
@@ -82,7 +90,7 @@ impl<
             .merkle_proof(set.iter().map(|v| v.get_key()).collect())
             .unwrap();
 
-        println!("Pre: {:?} || Post {:?}", pre_merkle_proof, post_merkle_proof);
+        //println!("Pre: {:?} || Post {:?}", pre_merkle_proof, post_merkle_proof);
 
         Ok(StateUpdate {
             pre_state_root,

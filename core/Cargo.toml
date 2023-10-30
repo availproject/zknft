@@ -28,9 +28,12 @@ sha2 = "0.10.7"
 ed25519-consensus = "2.1.0"
 serde-big-array = "0.5.1"
 anyhow = "1.0.75"
+warp = { version = "0.3.6", optional = true }
+http = { version = "0.2.9", optional = true }
+parity-scale-codec = { version = "3.6.5", features = ["derive"]}
 
 [features]
 default = ["zkvm"]
-native = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/default", "risc0-zkp", "avail/native", "hyper", "tokio", "actix-web", "reqwest"]
-native-metal = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/metal", "risc0-zkp", "avail/native", "hyper", "tokio", "actix-web", "reqwest"]
+native = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/default", "risc0-zkp", "avail/native", "hyper", "tokio", "actix-web", "reqwest", "warp", "http"]
+native-metal = ["rocksdb", "sparse-merkle-tree/arch-64", "sparse-merkle-tree/std", "primitive-types/std", "primitive-types/serde", "risc0-zkvm/metal", "risc0-zkp", "avail/native", "hyper", "tokio", "actix-web", "reqwest", "warp", "http"]
 zkvm = ["sparse-merkle-tree/arch-32", "sparse-merkle-tree/std", "primitive-types", "primitive-types/serde", "risc0-zkvm/std"]

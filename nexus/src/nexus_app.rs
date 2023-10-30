@@ -246,6 +246,11 @@ impl NexusApp {
             AppChain::Payments => &self.payments_da_service
         };
 
+        println!("{}", match pointer.chain {
+            AppChain::Nft => "NFT", 
+            AppChain::Payments => "Payments"
+        });
+
         let block = match da_service
                 .get_block_with_hash(pointer.block_hash)
                 .await
@@ -404,25 +409,24 @@ async fn submit_batch(
     let deserialized_call: SubmitProofParam = call.into_inner();
     
     match service.submit_batch(deserialized_call).await {
-        Ok(()) => "Proof verified and submitted successfully.", 
+        Ok(()) => HttpResponse::Ok().json("Proof verified and submitted successfully."),
         Err(e) => {
-            println!("{:?}", e);
-            "Proof submission failed."
+            HttpResponse::InternalServerError().body("Internal error.")
         }
     }
 }
 
-fn hex_string_to_u8_array(hex_string: &str) -> [u8; 32] {
+fn hex_string_to_u8_array(hex_string: &str) -> Result<[u8; 32], Error> {
     let bytes = hex::decode(hex_string).unwrap();
 
     if bytes.len() != 32 {
-        panic!("Hexadecimal string must represent exactly 32 bytes");
+        return Err(anyhow!("Hexadecimal string must represent exactly 32 bytes"));
     }
 
     let mut array = [0u8; 32];
     array.copy_from_slice(&bytes);
 
-    array
+    Ok(array)
 }
 
 async fn get_receipt_with_proof(
@@ -430,7 +434,12 @@ async fn get_receipt_with_proof(
     call: web::Query<ReceiptQuery>,
 ) -> impl Responder {
     let deserialized_call: ReceiptQuery = call.into_inner();
-    let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
+    let u8_array: [u8; 32] = match hex_string_to_u8_array(&deserialized_call.key) {
+        Ok(i) => i,
+        Err(e) => return HttpResponse::BadRequest().json("Invalid receipt hash."),
+    };
+
+    let key: H256 = H256::from(u8_array);
     let tree_state = service.tree_state.lock().unwrap();
 
     let receipt_with_proof = match tree_state.get_with_proof(&key) {

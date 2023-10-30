@@ -14,7 +14,7 @@ impl NodeDB {
         let mut db_options = Options::default();
         db_options.create_if_missing(true);
 
-        let db = DB::open(&db_options, path).unwrap();
+        let db = DB::open(&db_options, path).expect("unable to open rocks db.");
 
         NodeDB { db }
     }
@@ -31,12 +31,12 @@ impl NodeDB {
         match self.db.get(serialized_key) {
             Err(e) => Err(anyhow!("{}", e.to_string())),
             Ok(None) => Ok(None),
-            Ok(Some(i)) => Ok(from_slice(&i).unwrap()),
+            Ok(Some(i)) => Ok(from_slice(&i)?),
         }
     }
 
     pub fn put<V: Serialize>(&self, serialized_key: &[u8], value: &V) -> Result<(), Error> {
-        match self.db.put(serialized_key, to_vec(&value).unwrap()) {
+        match self.db.put(serialized_key, to_vec(&value)?) {
             Err(e) => Err(anyhow!("{}", e.to_string())),
             _ => Ok(()),
         }

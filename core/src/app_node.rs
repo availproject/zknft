@@ -4,13 +4,12 @@ use crate::traits::TxHasher;
 use crate::types::AggregatedBatch;
 use crate::types::DABatch;
 use crate::types::BatchHeader;
-
 use crate::types::TransactionWithReceipt;
 use crate::types::BatchWithProof;
-use crate::types::RPCMethod;
+use crate::types::ClientReply;
 use crate::types::{DaTxPointer, SubmitProofParam, AppChain};
+use crate::utils::hex_string_to_u8_array;
 use avail::service::{DaProvider as AvailDaProvider, DaServiceConfig};
-
 use risc0_zkp::core::digest::Digest;
 use risc0_zkvm::{
     serde::{from_slice, to_vec},
@@ -18,33 +17,27 @@ use risc0_zkvm::{
     Executor
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use parity_scale_codec::{Encode, Decode};
 use anyhow::{Error, anyhow};
-
-
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
 use sparse_merkle_tree::MerkleProof;
 use std::marker::PhantomData;
 use std::time::SystemTime;
 use std::time::Duration;
-
-
+use std::net::SocketAddr;
+use std::str::FromStr;
+use anyhow::Context;
 use std::io::prelude::*;
-
-
-
+use core::convert::Infallible;
 //Below imports for HTTP server.
-
-const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
-const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
-
-use actix_web::HttpResponse;
-use actix_web::{web, App, HttpServer, Responder, FromRequest, Handler};
+use warp::{Filter, reply::Reply, Rejection};
 use reqwest;
-
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+const NEXUS_SUBMIT_BATCH_URL: &str = "http://127.0.0.1:8080/submit-batch";
+const NEXUS_LATEST_BATCH_URL: &str = "http://127.0.0.1:8080/current-batch";
 
 #[derive(Clone)]
 pub struct AppNodeConfig {
@@ -57,8 +50,8 @@ pub struct AppNodeConfig {
     pub app_id: u32,
 }
 
-pub struct AppNode<V: Clone, T: Clone + DeserializeOwned + Serialize, S: StateMachine<V, T>> {
-    state_machine: Arc<Mutex<S>>,
+pub struct AppNode<V: Clone + Encode + Decode, T: Clone + DeserializeOwned + Serialize + Encode + Decode, S: StateMachine<V, T>> {
+    pub state_machine: Arc<Mutex<S>>,
     db: Arc<Mutex<NodeDB>>,
     da_service: AvailDaProvider,
     chain: AppChain,
@@ -69,8 +62,8 @@ pub struct AppNode<V: Clone, T: Clone + DeserializeOwned + Serialize, S: StateMa
 }
 
 impl<
-        V: Serialize + DeserializeOwned + Clone,
-        T: Clone + DeserializeOwned + Serialize + TxHasher,
+        V: Serialize + DeserializeOwned + Clone + Encode + Decode,
+        T: Clone + DeserializeOwned + Serialize + TxHasher + Encode + Decode,
         S: StateMachine<V, T>,
     > AppNode<V, T, S>
 {   
@@ -99,13 +92,15 @@ impl<
             Ok(None) => H256::zero(),
             Err(e) => panic!("Could not start node. {:?}", e),
         };
-        let state_machine = Arc::new(Mutex::new(S::new(last_state_root)));
+        let state_machine = Arc::new(Mutex::new(S::new(last_state_root.clone())));
         let da_service = AvailDaProvider::new(DaServiceConfig {
             node_client_url: config.node_client_url,
             light_client_url: config.light_client_url,
             seed: config.seed,
             app_id: config.app_id,
         }).await;
+
+        println!("Creating instance of node at state root: {:?}", &last_state_root);
 
         Self {
             state_machine,
@@ -119,72 +114,71 @@ impl<
         }
     }
 
-    //TODO: Complete implementation.
-    // pub async fn sync(&mut self) -> Result<(), Error> {
-    //     let start_height = 283562;
-    //     let light_client_url = "http://127.0.0.1:8000".to_string();
-    //     // Initialize the Avail service using the DaService interface
-    //     let da_service = AvailDaProvider::new(DaServiceConfig {
-    //         node_client_url: "wss://kate.avail.tools:443/ws".to_string(),
-    //         light_client_url,
-    //         seed: String::from("demo_seed"), 
-    //         app_id: 7,
-    //     }).await;
-
-    //     for height in start_height.. {
-    //         let filtered_block = match da_service.get_finalized_at(height).await {
-    //             Ok(i) => i,
-    //             Err(e) => panic!("{}", e.to_string()),
-    //         };
-
-    //         let batch: Option<Batch<T>> = match filtered_block.transactions.is_empty() {
-    //             true => None,
-    //             false => from_json_slice(&filtered_block.transactions[0].blob()).unwrap(),
-    //         };
-
-    //         match batch {
-    //             None => println!("no batches in block"),
-    //             Some(i) => println!("Found batch."),
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
     pub async fn run(&self) -> Result<(), Error> {
-        loop {
+        {   
+            //Below code is just to cleanup merkle tree and tx pool, to start from last known stable state.
             let mut tx_pool = self.tx_pool.lock().await;
 
-            while !tx_pool.is_empty() {
-                let last_state_root: H256 = {
-                    let db = self.db.lock().await;
+            //TODO: Only clear if failure due to transaction was detected.
+            tx_pool.clear();
 
-                    match db.get::<BatchHeader>(b"last_batch_header") {
-                    Ok(Some(i)) => i.state_root,
-                    Ok(None) => H256::zero(),
-                    Err(e) => panic!("Could not start node. {:?}", e),
-                    }
-                }; 
+            println!("Cleared tx pool, before starting.");
 
-                match self.execute_batch(tx_pool[0].clone()).await {
-                    Ok(()) => (), 
-                    Err(_e) => {
-                        let mut state_machine = self.state_machine.lock().await;
-                        println!("Reverting state machine.");
+            let last_state_root: H256 = {
+                let db = self.db.lock().await;
 
-                        match state_machine.revert(last_state_root) {
-                            Ok(()) => (), 
-                            Err(_e) => panic!("Reverting state failed. Need to restart node."),
-                        };
-                    }
+                match db.get::<BatchHeader>(b"last_batch_header") {
+                Ok(Some(i)) => i.state_root,
+                Ok(None) => H256::zero(),
+                Err(e) => panic!("Could not start node. {:?}", e),
                 }
+            }; 
 
-                //TODO: Only remove if the transaction failed 
-                //due to state transition error. (or was successful)
-                tx_pool.remove(0);
-                continue;
+            let mut state_machine = self.state_machine.lock().await;
+
+            match state_machine.revert(last_state_root) {
+                Ok(()) => (),
+                //TODO: Need to restart the service on this error.
+                Err(e) => panic!("Reverting state failed. Need to restart node."),
+            };
+        }
+
+        loop {
+            {
+                let mut tx_pool = self.tx_pool.lock().await;
+
+                while !tx_pool.is_empty() {
+                    let last_state_root: H256 = {
+                        let db = self.db.lock().await;
+
+                        match db.get::<BatchHeader>(b"last_batch_header") {
+                        Ok(Some(i)) => i.state_root,
+                        Ok(None) => H256::zero(),
+                        Err(e) => panic!("Could not start node. {:?}", e),
+                        }
+                    }; 
+
+                    match self.execute_batch(tx_pool[0].clone()).await {
+                        Ok(()) => (), 
+                        Err(e) => {
+                            println!("Reverting state machine to root: {:?} due to error: {:?}", &last_state_root,e);
+                            let mut state_machine = self.state_machine.lock().await;
+
+                            match state_machine.revert(last_state_root) {
+                                Ok(()) => (),
+                                //TODO: Need to restart the service on this error.
+                                Err(e) => panic!("Reverting state failed. Need to restart node."),
+                            };
+                        }
+                    }
+
+                    //TODO: Only remove if the transaction failed 
+                    //due to state transition error. (or was successful)
+                    tx_pool.remove(0);
+                    continue;
+                }
             }
-
+            println!("Sleeping end of loop.");
             //Make this configurable.
             tokio::time::sleep(Duration::from_secs(10)).await;
         } 
@@ -198,44 +192,37 @@ impl<
             match &db.get::<BatchHeader>(b"last_batch_header") {
             Ok(Some(i)) => i.batch_number,
             Ok(None) => 0,
-            Err(e) => panic!("Could not start node. {:?}", e),
+            Err(e) => return Err(anyhow!("Could not start node. {:?}", e)),
             }
         };
         //TODO: Add proper error handling below by removing unwrap and store last
         //batch in memory.
-        let aggregated_proof: AggregatedBatch =
-            reqwest::get(NEXUS_LATEST_BATCH_URL).await.unwrap().json().await.unwrap();
+        let response = reqwest::get(NEXUS_LATEST_BATCH_URL).await?;
+        let aggregated_proof: AggregatedBatch = response.json().await?;
 
         let mut state_machine = self.state_machine.lock().await;
 
         //TODO: Below should be replaced with a loop to execute a list of transactions.
         let (state_update, receipt) = state_machine
-            .execute_tx(call_params.clone(), aggregated_proof.clone())
-            .unwrap();
-
-        // println!(
-        //     "Pre state: {:?}, Post state: {:?}",
-        //     &state_update.pre_state_root, &state_update.post_state_root
-        // );
+            .execute_tx(call_params.clone(), aggregated_proof.clone())?;
 
         //Note: Have to do this weird construction as tokio spawn complains that 
         //env is not dropped before an async operation below so is not thread safe.
         let (batch, proof) = {
             let mut exec = {
                 let env = ExecutorEnv::builder()
-                    .add_input(&to_vec(&call_params).unwrap())
-                    .add_input(&to_vec(&state_update).unwrap())
-                    .add_input(&to_vec(&(last_batch_number + 1)).unwrap())
-                    .add_input(&to_vec(&aggregated_proof).unwrap())
-                    .build()
-                    .unwrap();
+                    .add_input(&to_vec(&call_params)?)
+                    .add_input(&to_vec(&state_update)?)
+                    .add_input(&to_vec(&(last_batch_number + 1))?)
+                    .add_input(&to_vec(&aggregated_proof)?)
+                    .build()?;
 
-                    Executor::from_elf(env, &self.zkvm_elf).unwrap()
+                    Executor::from_elf(env, &self.zkvm_elf)?
             };
 
             // Run the executor to produce a session.
-            let session = exec.run().unwrap();
-            let segments = session.resolve().unwrap();
+            let session = exec.run()?;
+            let segments = session.resolve()?;
 
             let cycles = segments
                 .iter()
@@ -244,14 +231,14 @@ impl<
             println!("Executed, cycles: {}k", cycles / 1024);
             let session_receipt = match session.prove() {
                 Ok(i) => i, 
-                Err(e) => {panic!("{:?}", e);}
+                Err(e) => return Err(anyhow!("{:?}", e))
             };
 
             println!("Session executed in zkvm with ID {:?}", &self.zkvm_id);
-            session_receipt.verify(self.zkvm_id).unwrap();
+            session_receipt.verify(self.zkvm_id)?;
             
             //TODO: Might not need to be deserialized, and need to remove unwrap.
-            let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
+            let batch_header: BatchHeader = from_slice(&session_receipt.journal)?;
             let _transaction_with_receipt = TransactionWithReceipt {
                 transaction: call_params.clone(),
                 receipt: receipt.clone(),
@@ -266,14 +253,14 @@ impl<
             )
         };
 
-        let serialized = bincode::serialize(&batch).unwrap();
+        let serialized = bincode::serialize(&batch)?;
         
         println!("Non compressed length: {},", serialized.len());
 
         let (block_hash, hash) = match self.da_service.send_transaction(&serialized).await {
             Ok(i) => {
-                println!("{:?}", i); 
-            i}, 
+                i
+            }, 
             //Change from default error.
             Err(e) => {
                 println!("error {:?}", e);
@@ -317,11 +304,11 @@ impl<
             200 => {
                 // Request was successful, handle the response here
                 let response_text = response.text().await?;
-                println!("Request successful. Response: {}", response_text);
+                println!("Batch submission successful. Response: {}", response_text);
             }
             _ => {
                 // Request failed
-                println!("Request failed with status code: {}", response.status());
+                println!("Batch submission failed with status code: {}", response.status());
 
                 return Err(anyhow!("Submit batch failed, will try to execute again."));
             }
@@ -358,9 +345,29 @@ impl<
     }
 
     pub async fn add_to_tx_pool(&self, tx: T) {
+        println!("Adding tx hash to pool: {:?}", tx.to_h256());
         let mut tx_pool = self.tx_pool.lock().await;
 
         tx_pool.push(tx)
+    }
+
+    pub async fn get_tx_status(&self, hash: H256) -> Result<String, Error> {
+        let mut tx_pool = self.tx_pool.lock().await;
+
+        for tx in tx_pool.iter() {
+            // Check if the hash of the current item matches the target hash
+            if tx.to_h256() == hash {
+                return Ok(String::from("tx_pool"));
+            }
+        }
+
+        let db = self.db.lock().await;
+        
+        match db.get::<T>(hash.as_slice()) {
+            Ok(Some(_i)) => return  Ok(String::from("finalized.")),
+            Ok(None) => return  Ok(String::from("dropped")),
+            Err(e) => return  Err(anyhow!("{:?}", e)),
+        }
     }
 
     pub async fn get_state_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error> {
@@ -368,144 +375,142 @@ impl<
 
         state_machine.get_state_with_proof(key)
     }
+
+    pub async fn get_root(&self) -> Result<H256, Error> {
+        let state_machine = self.state_machine.lock().await;
+
+        state_machine.get_root()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
 pub struct StateQuery {
   key: String,
 }
-fn hex_string_to_u8_array(hex_string: &str) -> [u8; 32] {
-    let bytes = hex::decode(hex_string).unwrap();
-    
-    if bytes.len() != 32 {
-        panic!("Hexadecimal string must represent exactly 32 bytes");
-    }
-  
-    let mut array = [0u8; 32];
-    array.copy_from_slice(&bytes);
-  
-    array
-}
-async fn get_state_with_proof<V, T, S>(
-    service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
-    call: web::Query<StateQuery>,
-) -> impl Responder where
-V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
-S: StateMachine<V, T> + std::marker::Send,
-{
-    let app = service.lock().await;
-    let deserialized_call: StateQuery = call.into_inner();
-    let key: H256 = H256::from(hex_string_to_u8_array(&deserialized_call.key));
-    
-    let state_with_proof = match app.get_state_with_proof(&key).await {
-      Ok(i) => i,
-      Err(_e) => return HttpResponse::InternalServerError().body("Internal error.")
-    };
-    
-    HttpResponse::Ok().json(state_with_proof)
-}
 
-pub async fn api_handler<V, T, S>(
-    service: web::Data<Arc<Mutex<AppNode<V, T, S>>>>,
-    call: web::Json<T>,
-) -> impl Responder
+pub async fn get_state_with_proof<V, T, S>(
+    service: Arc<Mutex<AppNode<V, T, S>>>,
+    query: String,
+) -> Result<ClientReply<(V, MerkleProof)>, Infallible> 
 where
-    V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send,
 {
     let app = service.lock().await;
-    println!("Adding transaction to pool.");
-
-    app.add_to_tx_pool(call.clone()).await;
-
-    "Transaction Added to batch."
+    let key: H256 = H256::from(match hex_string_to_u8_array(&query) {
+        Ok(i) => i,
+        Err(e) => return Ok(ClientReply::Error(e))
+    });
+    println!("key: {:?} {:?}", &query, &key);
+    
+    let state_with_proof = match app.get_state_with_proof(&key).await {
+      Ok(i) => i,
+      Err(e) => return Ok(ClientReply::Error(e))
+    };
+    
+    Ok(ClientReply::Ok(state_with_proof))
 }
 
-pub async fn start_rpc_server<V, T, S>(singleton: AppNode<V, T, S>, port: u16)
+pub async fn api_handler<V, T, S>(
+    service: Arc<Mutex<AppNode<V, T, S>>>,
+    call: T,
+) ->  Result<ClientReply<String>, Infallible>
 where
-    V: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone,
-    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
-    S: StateMachine<V, T> + std::marker::Send + 'static,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
+    S: StateMachine<V, T> + std::marker::Send,
+{   
+    let app = service.lock().await;
+    println!("Adding transaction to pool.");
+
+    app.add_to_tx_pool(call).await;
+
+    Ok(ClientReply::Ok(String::from("Transaction added to batch.")))
+}
+
+pub async fn get_tx_status<V, T, S> (
+    service: Arc<Mutex<AppNode<V, T, S>>>,
+    call: H256,
+) -> Result<ClientReply<String>, Infallible>
+where
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
+    S: StateMachine<V, T> + std::marker::Send,
 {
-    let shared_service = Arc::new(Mutex::new(singleton));
-    println!("Starting rpc server");
-    HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(shared_service.clone()))
-            .route("/", web::post().to(api_handler::<V, T, S>))
-            .route("/state", web::get().to(get_state_with_proof::<V, T, S>))
-    })
-    .bind(("127.0.0.1", port))
-    .unwrap()
-    .run()
-    .await;
+    let app = service.lock().await;
+
+    match app.get_tx_status(call).await {
+        Ok(i) => Ok(ClientReply::Ok(i)), 
+        Err(e) => Ok(ClientReply::Error(e)),
+    }
+}
+
+pub fn routes<V, T, S>(service: Arc<Mutex<AppNode<V, T, S>>>) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone 
+where
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + std::marker::Sync + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
+    S: StateMachine<V, T> + std::marker::Send,
+{
+    let send_tx_app = service.clone();
+    let tx_status_app = service.clone();
+    let state_app = service.clone();
+
+    let send_tx = warp::path!("tx")
+            .and(warp::any().map(move || send_tx_app.clone()))
+            .and(warp::body::json())
+            .and_then(api_handler::<V, T, S>);
+
+    let tx_status = warp::path!("tx_status")
+            .and(warp::any().map(move || tx_status_app.clone()))
+            .and(warp::body::json())
+            .and_then(get_tx_status::<V, T, S>);
+
+    let state_with_proof = warp::path("state")
+            .and(warp::any().map(move || state_app.clone()))
+            .and(warp::path::param::<String>())
+            .and_then(get_state_with_proof::<V, T, S>);
+
+    send_tx.or(tx_status).or(state_with_proof)
 }
 
 pub struct RPCServer<V, T, S> where 
-V: Serialize + DeserializeOwned + std::marker::Send + Clone,
-T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+V: Serialize + DeserializeOwned + std::marker::Send + Clone + Encode + Decode,
+T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
 S: StateMachine<V, T> + std::marker::Send,
 {
     shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, 
     port: u16,
+    host: String,
 }
 
 impl<
-    V: Serialize + DeserializeOwned + std::marker::Send + Clone + 'static,
-    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher,
+    V: Serialize + DeserializeOwned + std::marker::Send + Clone + 'static + Encode + Decode,
+    T: Serialize + DeserializeOwned + std::marker::Send + 'static + Clone + TxHasher + Encode + Decode,
     S: StateMachine<V, T> + std::marker::Send + 'static,
 > RPCServer <V, T, S> 
 {
-    pub fn new(shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, port: u16) -> Self {   
+    pub fn new(shared_app_node: Arc<Mutex<AppNode<V, T, S>>>, host: String, port: u16) -> Self {   
 
         RPCServer {
             shared_app_node, 
+            host,
             port
         }
     }
-
-    // pub fn register() -> Self {
-
-    // }
-
-    // pub fn create_route<F, Args>(rpc_method: F) -> dyn Fn() -> F + std::marker::Send + 'static 
-    // where 
-    // F: Handler<Args> + std::marker::Send,
-    // Args: FromRequest + 'static + std::marker::Send,
-    // F::Output: Responder + 'static
-    // {
-    //     move || {
-    //             web::post().to(rpc_method)
-    //             // .route("/", web::post().to(api_handler::<V, T, S>))
-    //             // .route("/state", web::get().to(get_state_with_proof::<V, T, S>));
-    //     }
-    // }
-
-    pub async fn run<F, Args>(&self, rpc_methods: Vec<RPCMethod<F, Args>>) 
-    where  
-    F: Handler<Args> + std::marker::Send + Clone + std::marker::Sync,
-    Args: FromRequest + 'static + std::marker::Send + std::marker::Sync,
-    F::Output: Responder + 'static
-    {
-        let shared_app_node = self.shared_app_node.clone();
-        //let methods = self.rpc_methods.clone();
-
-        let server = HttpServer::new(move || {
-            let mut app = App::new()
-                .app_data(web::Data::new(shared_app_node.clone()));
-
-            for method in &rpc_methods {
-                app = app.route(&method.0, web::post().to(method.1.clone()));
-            }
-
-            app
-        })
-        .bind(("127.0.0.1", self.port))
+    
+    pub async fn run<F>(&self, routes: F)
+    where 
+        F: Filter + Clone + Send + Sync + 'static,
+        F::Extract: Reply,
+        F::Error: Into<Rejection>,
+    {   
+        //TODO: Maybe return error instead of panicking here.
+        let address = SocketAddr::from_str(format!("{}:{}", &self.host, &self.port).as_str())
+        .context("Unable to parse host address from config")
         .unwrap();
 
-        println!("Starting rpc server");
-        server.run().await;
+        println!("RPC Server running on: {:?}", &address);
+        warp::serve(routes).run(address).await;
     }
 }

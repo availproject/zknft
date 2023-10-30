@@ -2,7 +2,7 @@ use core::time::Duration;
 
 use anyhow::anyhow;
 use avail_subxt::api;
-use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
+use avail_subxt::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
 use avail_subxt::primitives::AvailExtrinsicParams;
 use avail_subxt::AvailConfig;
 use avail_subxt::config::Header;
@@ -12,8 +12,6 @@ use sp_keyring::sr25519::sr25519::Pair;
 use subxt::tx::PairSigner;
 use subxt::OnlineClient;
 use primitive_types::H256;
-
-
 use crate::avail::AvailBlobTransaction;
 use crate::avail::AvailBlock;
 use crate::avail::AvailHeader;
@@ -78,6 +76,7 @@ async fn wait_for_confidence(confidence_url: &str) -> anyhow::Result<()> {
     let start_time = std::time::Instant::now();
 
     loop {
+        println!("Waiting for confidence: {:?}", &confidence_url);
         if start_time.elapsed() >= POLLING_TIMEOUT {
             return Err(anyhow!("Timeout..."));
         }
@@ -106,6 +105,8 @@ async fn wait_for_appdata(appdata_url: &str, block: u32) -> anyhow::Result<Extri
     let start_time = std::time::Instant::now();
 
     loop {
+        println!("Getting app data {:?}", appdata_url);
+
         if start_time.elapsed() >= POLLING_TIMEOUT {
             return Err(anyhow!("Timeout..."));
         }
@@ -134,27 +135,39 @@ impl DaProvider {
         let node_client = self.node_client.clone();
         let (header, hash) = match height_or_hash {
             HeightOrHash::Height(i) => {
-                let hash = node_client
+                let hash = match node_client
                 .rpc()
                 .block_hash(Some(i.into()))
-                .await?
-                .unwrap();
-    
-                (node_client.rpc().header(Some(hash)).await?.unwrap(), hash)
+                .await? {
+                    Some(i) => i, 
+                    None => return Err(anyhow!("Hash for height {} not found.", i))
+                };
+                
+                let header = match node_client.rpc().header(Some(hash)).await? {
+                    Some(i) => i, 
+                    None => return Err(anyhow!("Header not found for hash: {}", hash))
+                };
+
+                (header, hash)
             }, 
             HeightOrHash::Hash(i) => {
                 let hash = H256::from(i);
 
-               (node_client.rpc().header(Some(hash)).await?.unwrap(), hash)
+                let header = match node_client.rpc().header(Some(hash)).await? {
+                    Some(i) => i, 
+                    None => return Err(anyhow!("Header not found for hash: {}", hash))
+                };
+               (header, hash)
             }
         };
+        
         let height = header.number();
-        let confidence_url = self.confidence_url(height.into());
+        let _confidence_url = self.confidence_url(height.into());
         let appdata_url = self.appdata_url(height.into());
 
-        wait_for_confidence(&confidence_url).await?;
+        //TODO: Wait for confidence.
+        //wait_for_confidence(&confidence_url).await?;
         let appdata = wait_for_appdata(&appdata_url, height).await?;
-        println!("Appdata: {:?}", appdata);
 
         let header = AvailHeader::new(header, hash);
         let transactions = appdata

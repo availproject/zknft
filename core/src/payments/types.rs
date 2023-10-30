@@ -3,14 +3,16 @@ use crate::{
     types::{ShaHasher, TxSignature, Address},
 };
 use risc0_zkvm::sha::rust_crypto::Digest;
+use parity_scale_codec::{Encode, Decode};
 use serde::{Deserialize, Serialize};
+use ed25519_consensus::Signature;
+use anyhow::{anyhow};
 use sparse_merkle_tree::{
     traits::{Hasher, Value},
     H256,
 };
-use ed25519_consensus::Signature;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default, Encode, Decode)]
 pub struct Account {
     pub address: Address,
     pub balance: u64,
@@ -30,10 +32,9 @@ impl Value for Account {
         }
 
         let mut hasher = ShaHasher::new();
-        let serialized = bincode::serialize(&self).unwrap();
+        let encoded = self.encode();
 
-        hasher.0.update(&serialized);
-
+        hasher.0.update(&encoded);
         hasher.finish()
     }
 
@@ -42,19 +43,19 @@ impl Value for Account {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Encode, Decode)]
 pub enum CallType {
     Transfer,
     Mint,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Encode, Decode)]
 pub struct Transaction {
-    pub message: TransactionMessage,
+    pub message: Vec<u8>,
     pub signature: TxSignature,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Encode, Decode)]
 pub struct TransactionMessage {
     pub from: Address,
     pub to: Address,
@@ -66,7 +67,9 @@ pub struct TransactionMessage {
 impl TxHasher for Transaction {
     fn to_h256(&self) -> H256 {
         let mut hasher = ShaHasher::new();
-        let serialized = bincode::serialize(&self).unwrap();
+        let serialized = self.to_encoded();
+        println!("Serialized tx: {:?}", &serialized);
+        
         hasher.0.update(&serialized);
 
         hasher.finish()
@@ -77,15 +80,19 @@ impl Transaction {
     pub fn signature(&self) -> Signature {
         Signature::from(*self.signature.as_bytes())
     }
-}
 
-impl TransactionMessage {
-    pub fn to_vec(&self) -> Vec<u8> {
-        bincode::serialize(&self).unwrap()
+    pub fn to_encoded(&self) -> Vec<u8> {
+        self.encode()
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+impl TransactionMessage {
+    pub fn to_encoded(&self) -> Vec<u8> {
+        self.encode()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Encode, Decode)]
 pub struct PaymentReceiptData {
     pub from: Address,
     pub to: Address,
@@ -96,7 +103,21 @@ pub struct PaymentReceiptData {
 }
 
 impl PaymentReceiptData {
-    pub fn to_vec(&self) -> Vec<u8> {
-        bincode::serialize(&self).unwrap()
+    pub fn to_encoded(&self) -> Vec<u8> {
+        self.encode()
+    }
+}
+
+impl TryFrom<Transaction> for TransactionMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Transaction) -> Result<Self, Self::Error> {
+        let vec_u8 = value.message;
+        let mut slice_u8: &[u8] = &vec_u8;
+
+        match TransactionMessage::decode(&mut slice_u8) {
+            Ok(i) => Ok(i),
+            Err(e) => Err(anyhow!("{:?}", e))
+        }
     }
 }

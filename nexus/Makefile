@@ -25,6 +25,7 @@ check-container-exists:
 	@docker ps -a --format '{{.Names}}' | grep -w $(CONTAINER_NAME) > /dev/null 2>&1
 
 build-docker-image:
+	@echo "Starting NFT light client with APP_ID=$(APP_ID)"
 	@docker build --platform linux/amd64 --build-arg NODE_CLIENT_URL=wss://kate.avail.tools:443/ws --build-arg APP_ID=$(APP_ID) -t $(IMAGE_NAME) .
 
 check-image-exists:
@@ -40,7 +41,7 @@ start-existing:
 
 start-new:
 	@echo "Starting new container: $(CONTAINER_NAME)"
-	docker run -d --platform linux/amd64 -p $(LIGHT_CLIENT_PORT):7000 --name $(CONTAINER_NAME) -t $(IMAGE_NAME)
+	docker run -d --platform linux/amd64 -p $(LIGHT_CLIENT_PORT):7000 --name $(CONTAINER_NAME) -t --restart unless-stopped $(IMAGE_NAME)
 
 start-container: check-image-exists
 	@$(MAKE) check-container-running || { $(MAKE) check-container-exists && $(MAKE) start-existing || $(MAKE) start-new; }
