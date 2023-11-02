@@ -1,17 +1,14 @@
-use crate::{
-    state::MerkleStore,
-    traits::Leaf,
-    types::StateUpdate,
-};
+use crate::{state::MerkleStore, traits::Leaf, types::StateUpdate};
+use anyhow::{anyhow, Error};
 use risc0_zkvm::sha::rust_crypto::{Digest as _, Sha256};
+use rocksdb::{Options, DB};
 use serde::{de::DeserializeOwned, Serialize};
-use sparse_merkle_tree::{
-    traits::Hasher,
-    traits::{Value},
-    MerkleProof, SparseMerkleTree, H256,
+use sparse_merkle_tree::{traits::Hasher, traits::Value, MerkleProof, SparseMerkleTree, H256};
+use std::{
+    cmp::PartialEq,
+    collections::HashMap,
+    sync::{Arc, Mutex},
 };
-use std::cmp::PartialEq;
-use anyhow::{Error, anyhow};
 
 #[derive(Default)]
 pub struct ShaHasher(pub Sha256);
@@ -34,6 +31,7 @@ impl Hasher for ShaHasher {
 //TODO - Replace MerkleStore with a generic so any backing store could be used.
 pub struct VmState<V> {
     tree: SparseMerkleTree<ShaHasher, V, MerkleStore>,
+    merkle_store: MerkleStore,
 }
 
 impl<
@@ -48,16 +46,45 @@ impl<
     > VmState<V>
 {
     pub fn new(root: H256) -> Self {
+        let mut db_options = Options::default();
+        db_options.create_if_missing(true);
+        let db = DB::open(&db_options, String::from("./app_node")).unwrap();
+        let cache: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
+        let db_arc = Arc::new(Mutex::new(db));
+        let cache_arc = Arc::new(Mutex::new(cache));
+
         VmState {
-            tree: SparseMerkleTree::new(root, MerkleStore::from_path(String::from("./app_node"))),
+            tree: SparseMerkleTree::new(
+                root,
+                MerkleStore::with_db(db_arc.clone(), cache_arc.clone()),
+            ),
+            merkle_store: MerkleStore::with_db(db_arc, cache_arc),
         }
     }
 
-    pub fn revert(self, root: H256) -> Self {
-        let store: MerkleStore = self.tree.take_store();
+    //Revert to last committed state and clear cache.
+    pub fn revert(&mut self) -> Result<(), Error> {
+        self.merkle_store.clear_cache()?;
 
-        VmState {
-            tree: SparseMerkleTree::new(root, store),
+        let tree = match SparseMerkleTree::new_with_store(self.merkle_store.clone()) {
+            Ok(i) => i,
+            Err(e) => {
+                return Err(anyhow!(
+                    "Could not calculate root from last committed state. Critical error."
+                ))
+            }
+        };
+
+        self.tree = tree;
+        println!("Reverted to root: {:?}", self.tree.root());
+
+        Ok(())
+    }
+
+    pub fn commit(&mut self) -> Result<(), Error> {
+        match self.merkle_store.commit() {
+            Ok(()) => Ok(()),
+            Err(e) => Err(anyhow!(e.to_string())),
         }
     }
 

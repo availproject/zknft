@@ -1,24 +1,24 @@
-
+use anyhow::Error;
+use ed25519_consensus::{Signature, SigningKey};
 use nft_core::{
-    types::{TxSignature, Address}, 
-    payments::types::{TransactionMessage, Transaction, CallType},
+    payments::types::{CallType, Transaction, TransactionMessage},
+    types::{Address, TxSignature},
     utils::hex_string_to_u8_array,
 };
-use serde::{ de::DeserializeOwned, Serialize, Deserialize};
-use ed25519_consensus::{Signature, SigningKey};
-use sparse_merkle_tree::H256;
 use primitive_types::U256;
-use anyhow::Error;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::Digest;
+use sparse_merkle_tree::H256;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Data {
-    keypair_bytes: [u8; 32]
+    keypair_bytes: [u8; 32],
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error>  {
-    let mint_to = String::from("0x41083dfd36361213d4e08e4002115f4e83d92b4e2bbc952fbcf56d2a2903eebb");
+async fn main() -> Result<(), Error> {
+    let mint_to =
+        String::from("0x41083dfd36361213d4e08e4002115f4e83d92b4e2bbc952fbcf56d2a2903eebb");
     let json_data = std::fs::read_to_string("keypair.json").unwrap();
     let payments_url = "http://127.0.0.1:7001/tx";
 
@@ -31,10 +31,10 @@ async fn main() -> Result<(), Error>  {
 
     println!("Address: {:?}", &to);
     let transaction_message: TransactionMessage = TransactionMessage {
-        from: address.clone(), 
+        from: address.clone(),
         to: to.clone(),
-        amount: 1000, 
-        call_type: CallType::Mint, 
+        amount: 1000,
+        call_type: CallType::Mint,
         data: None,
     };
 
@@ -42,24 +42,34 @@ async fn main() -> Result<(), Error>  {
 
     let signature: Signature = signing_key.sign(&encoded_message);
 
-    match transaction_message.from.verify_msg(&TxSignature::from(signature), &encoded_message)
+    match transaction_message
+        .from
+        .verify_msg(&TxSignature::from(signature), &encoded_message)
     {
-        true => { println!("Verification done")},
-        false => { println!("Verification failed.")},
+        true => {
+            println!("Verification done")
+        }
+        false => {
+            println!("Verification failed.")
+        }
     };
 
     send_post_request(
-        payments_url, 
+        payments_url,
         Transaction {
             message: encoded_message,
-            signature: TxSignature::from(signature)
-        }
-    ).await?;
+            signature: TxSignature::from(signature),
+        },
+    )
+    .await?;
 
     Ok(())
 }
 
-async fn send_post_request<T: Serialize + DeserializeOwned>(url: &str, body: T) -> Result<(), Error> {
+async fn send_post_request<T: Serialize + DeserializeOwned>(
+    url: &str,
+    body: T,
+) -> Result<(), Error> {
     // Create a reqwest client
     let client = reqwest::Client::new();
 
@@ -76,17 +86,23 @@ async fn send_post_request<T: Serialize + DeserializeOwned>(url: &str, body: T) 
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
 pub struct ReceiptQuery {
-  key: String,
+    key: String,
 }
 
-
-async fn send_get_request<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned>(base_url: &str, query_params: T) -> Result<R, Error> {
+async fn send_get_request<T: Serialize + DeserializeOwned, R: Serialize + DeserializeOwned>(
+    base_url: &str,
+    query_params: T,
+) -> Result<R, Error> {
     // Create a reqwest client
     let client = reqwest::Client::new();
     // let serialized = serde_json::to_string(&body)
     // .unwrap();
 
-    let url = format!("{}?{}", base_url, serde_urlencoded::to_string(&query_params).unwrap());
+    let url = format!(
+        "{}?{}",
+        base_url,
+        serde_urlencoded::to_string(&query_params).unwrap()
+    );
 
     // Send the POST request with the JSON body
     let response = client.get(url).send().await?;

@@ -20,7 +20,7 @@ export async function Carousel({ nfts }: { nfts: NFT[] }) {
             key={`${product.metadata.name.toLowerCase()}${i}`}
             className="relative aspect-square h-[30vh] max-h-[275px] w-2/3 max-w-[475px] flex-none md:w-1/3"
           >
-            <Link href={`/product/${product.metadata.name.toLowerCase()}`} className="relative h-full w-full">
+            <Link href={`/?selectedNFT=${product.id}`} className="relative h-full w-full">
               <GridTileImage
                 alt={product.metadata.name}
                 label={{

@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 risc0-zkvm = { version = "0.18.0" }
 serde = "1.0"
-nft_core = { path = "../../core", features = ["native-metal"] }
+nft_core = { path = "../../core", features = ["native"] }
 primitive-types = "0.12.1"
 payments-methods = { path = "../methods" }
 sparse-merkle-tree = { path = "../../../sparse-merkle-tree" }

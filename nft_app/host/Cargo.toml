@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-risc0-zkvm = { version = "0.18.0", default-features = false, features = ["metal"] }
+risc0-zkvm = { version = "0.18.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
-nft_core = { path = "../../core", features = ["native-metal"] }
+nft_core = { path = "../../core", features = ["native"] }
 primitive-types = { version = "0.12.1", default-features = false, features = ["serde"] }
 nft-methods = { path = "../methods" }
 sparse-merkle-tree = { path = "../../../sparse-merkle-tree" }

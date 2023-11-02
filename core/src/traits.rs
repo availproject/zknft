@@ -1,11 +1,9 @@
-use crate::{
-    types::{AggregatedBatch, StateUpdate, TransactionReceipt},
-};
+use crate::types::{AggregatedBatch, StateUpdate, TransactionReceipt};
+use anyhow::Error;
+use parity_scale_codec::{Decode, Encode};
 use serde::{de::DeserializeOwned, Serialize};
-use parity_scale_codec::{Encode, Decode};
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
-use anyhow::Error;
 
 pub trait Leaf<K> {
     fn get_key(&self) -> K;
@@ -18,11 +16,9 @@ pub trait StateMachine<V, T: Clone + DeserializeOwned + Serialize + Encode + Dec
         call: T,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<V>, TransactionReceipt), Error>;
-    fn get_state_with_proof(
-        &self, 
-        key: &H256, 
-    ) -> Result<(V, MerkleProof), Error>;
-    fn revert(&mut self, root: H256) -> Result<(), Error>;
+    fn get_state_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error>;
+    fn revert(&mut self) -> Result<(), Error>;
+    fn commit(&mut self) -> Result<(), Error>;
     fn get_root(&self) -> Result<H256, Error>;
 }
 
