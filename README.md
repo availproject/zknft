@@ -1,39 +1,41 @@
-# RISC Zero Rust Starter Template
+# ZKNFT
 
-Welcome to the RISC Zero Rust Starter Template! This template is intended to give you a starting point for building a project using the RISC Zero zkVM. Throughout the code are comments labelled `TODO` in places where we expect projects will need to modify the code. 
-To better understand the concepts behind this template, check out our [Understanding the Starter Template] explainer. 
+Welcome to an experimental project that delves into the realm of asynchronous composability in blockchains. This initiative aims to facilitate seamless communication and information sharing among diverse application chains. The following example illustrates a scenario where an NFT purchase occurs on one chain while the payment is accepted on a different chain, showcasing the exciting possibilities unlocked.
 
-TODO: Replace this README with a README for your project
-TODO: Verify whether the included `.gitignore`, `LICENSE`, and `rust-toolchain` files are appropriate to your project
+## Nexus
 
-## Quick Start
+The Nexus crate serves as a middleware that plays a crucial role in the project's architecture. It performs the following key functions:
 
-First, make sure [rustup](https://rustup.rs) is installed. This project uses a [nightly](https://doc.rust-lang.org/book/appendix-07-nightly-rust.html) version of [Rust](https://doc.rust-lang.org/book/ch01-01-installation.html). The [`rust-toolchain`](rust-toolchain) file will be used by `cargo` to automatically install the correct version.
+- Accepts batches from application chains and verifies zk-proofs.
+- Generates an aggregated succinct proof for all the accepted batches.
+- Aggregates all receipts generated in each app chain, to create a receipt merkle root.
 
-To build all methods and execute the method within the zkVM, run the following command:
+The receipt root enables the proof of inclusion for a receipt on any app chain to be validated on any other app chain. This functionality ensures a high level of interoperability among different chains, and offers increased flexibility.
 
-```
-cargo run
-```
+## Core
 
-This is an empty template, and so there is no expected output (until you modify the code).
+The Core package provides essential tooling for creating application chains. These chains are designed to seamlessly communicate with the Nexus middleware, forming a cohesive and interconnected blockchain ecosystem.
 
-## How to create a project based on this template
+## NFTApp
 
-Search this template for the string `TODO`, and make the necessary changes to implement the required feature described by the `TODO` comment. Some of these changes will be complex, and so we have a number of instructional resources to assist you in learning how to write your own code for the RISC Zero zkVM:
- * The [Getting Started section](https://www.risczero.com/docs) of the [RISC Zero website](https://www.risczero.com) is a great place to get started. There are additional explainers and overviews on our website as well.
- * Example projects are available in the [examples folder](https://github.com/risc0/risc0/tree/main/examples) of this repository.
- * Reference documentation for our Rust crates is available at [docs.rs], including the [RISC Zero zkVM crate](https://docs.rs/risc0-zkvm), the [cargo risczero crate](https://docs.rs/cargo-risczero), the [RISC Zero build crate](https://docs.rs/risc0-build), and others (the full list is available at [https://github.com/risc0/risc0/blob/main/README.md]).
- * Our [main repository](https://www.github.com/risc0/risc0).
+The NFTApp crate represents an application chain specifically tailored for Non-Fungible Tokens (NFTs). This chain interacts with the Nexus middleware to leverage the benefits of asynchronous composability.
 
+## PaymentsApp
 
-## Contributor's Guide
-We welcome contributions to documentation and code via PRs and GitHub Issues on our [main repository](http://www.github.com/risc0) or any of our other repositories.
+The PaymentsApp crate is dedicated to handling payment-related functionalities within the blockchain ecosystem. It communicates with the Nexus middleware to ensure that payment information is securely and efficiently shared across different application chains.
 
-## Video Tutorial
-For a walk-through of how to build with this template, check out this [excerpt from our workshop at ZK HACK III](https://www.youtube.com/watch?v=Yg_BGqj_6lg&list=PLcPzhUaCxlCgig7ofeARMPwQ8vbuD6hC5&index=5).
+## NFT UI
 
-## Questions, Feedback, and Collaborations
-We'd love to hear from you on [Discord](https://discord.gg/risczero) or [Twitter](https://twitter.com/risczero).
+The NFT UI serves as the user interface for interacting with the NFT application chain. It provides users with a seamless experience for managing and trading NFTs within the blockchain network.
 
-[Understanding the Starter Template]: https://www.risczero.com/docs/examples/understanding_template
+## Payments UI
+
+The Payments UI is the user interface designed for interacting with the Payments application chain. It enables users to engage with payment functionalities and ensures a smooth user experience in the blockchain ecosystem.
+
+## Getting Started
+
+To get started with this project, follow these steps:
+
+1. Clone the repository: `git clone https://github.com/availproject/zk-nft.git`
+2. Navigate to the project directory: `cd zk-nft`
+3. Follow the specific README files in each crate to set up and run the respective components.

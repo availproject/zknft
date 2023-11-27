@@ -223,4 +223,3 @@ export interface CheckPaymentReply {
   id: string,
   status: TransferStatus,
 }
-
