@@ -34,7 +34,8 @@ export type NFT = {
   nonce: number,
   metadata: NftMetadata,
   price: number,
-  currency_symbol: string,
+  currencySymbol: string,
+  custodian: string,
 };
 
 export type NftMetadata = {

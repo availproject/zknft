@@ -38,7 +38,7 @@ impl NftStateMachine {
 
         //Get latest state of all listed nfts.
         for id in &listed_nft_ids {
-            match self.state.get(&id.get_key()) {
+            match self.state.get(&id.get_key(), true) {
                 Ok(Some(i)) => listed_nfts.push(i),
                 Ok(None) => (),
                 Err(e) => return Err(anyhow!("Could not get nft from db: {:?}", e)),
@@ -81,7 +81,7 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
 
         println!("{:?}", &nft_key);
 
-        let nft = match self.state.get(&nft_key) {
+        let nft = match self.state.get(&nft_key, false) {
             Ok(Some(i)) => i,
             Err(e) => return Err(e),
             Ok(None) => Nft::zero(),
@@ -156,6 +156,10 @@ impl StateMachine<Nft, NftTransaction> for NftStateMachine {
 
     fn get_state_with_proof(&self, key: &H256) -> Result<(Nft, MerkleProof), Error> {
         self.state.get_with_proof(key)
+    }
+
+    fn get_state(&self, key: &H256) -> Result<Option<Nft>, Error> {
+        self.state.get(key, true)
     }
 
     fn revert(&mut self) -> Result<(), Error> {

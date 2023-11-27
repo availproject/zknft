@@ -20,10 +20,8 @@ use risc0_zkvm::{
     Executor, ExecutorEnv,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
-use std::io::prelude::*;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -136,15 +134,21 @@ impl<
             match state_machine.revert() {
                 Ok(()) => (),
                 //TODO: Need to restart the service on this error.
-                Err(e) => panic!("Reverting state failed. Need to restart node."),
+                Err(e) => panic!("Reverting state failed. Need to restart node. {e}"),
             };
         }
 
         loop {
             {
-                let mut tx_pool = self.tx_pool.lock().await;
+                while {
+                    let tx_pool = self.tx_pool.lock().await;
+                    !tx_pool.is_empty()
+                } {
+                    let tx = {
+                        let tx_pool = self.tx_pool.lock().await;
+                        tx_pool[0].clone()
+                    };
 
-                while !tx_pool.is_empty() {
                     let last_state_root: H256 = {
                         let db = self.db.lock().await;
 
@@ -155,7 +159,7 @@ impl<
                         }
                     };
 
-                    match self.execute_batch(tx_pool[0].clone()).await {
+                    match self.execute_batch(tx).await {
                         Ok(i) => {
                             //TODO: Handle these cases better as submissions are already done and aggregated,
                             //but below errors will create a mismatch.
@@ -195,7 +199,11 @@ impl<
 
                     //TODO: Only remove if the transaction failed
                     //due to state transition error. (or was successful)
-                    tx_pool.remove(0);
+                    {
+                        let mut tx_pool = self.tx_pool.lock().await;
+
+                        tx_pool.remove(0);
+                    }
                     continue;
                 }
             }
@@ -221,11 +229,11 @@ impl<
         let response = reqwest::get(NEXUS_LATEST_BATCH_URL).await?;
         let aggregated_proof: AggregatedBatch = response.json().await?;
 
-        let mut state_machine = self.state_machine.lock().await;
-
         //TODO: Below should be replaced with a loop to execute a list of transactions.
-        let (state_update, receipt) =
-            state_machine.execute_tx(call_params.clone(), aggregated_proof.clone())?;
+        let (state_update, receipt) = {
+            let mut state_machine = self.state_machine.lock().await;
+            state_machine.execute_tx(call_params.clone(), aggregated_proof.clone())?
+        };
 
         //Note: Have to do this weird construction as tokio spawn complains that
         //env is not dropped before an async operation below so is not thread safe.
@@ -395,6 +403,12 @@ impl<
         let state_machine = self.state_machine.lock().await;
 
         state_machine.get_state_with_proof(key)
+    }
+
+    pub async fn get_state(&self, key: &H256) -> Result<Option<V>, Error> {
+        let state_machine = self.state_machine.lock().await;
+
+        state_machine.get_state(key)
     }
 
     pub async fn get_root(&self) -> Result<H256, Error> {

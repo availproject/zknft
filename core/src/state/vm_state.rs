@@ -48,10 +48,12 @@ impl<
     pub fn new(root: H256) -> Self {
         let mut db_options = Options::default();
         db_options.create_if_missing(true);
-        let db = DB::open(&db_options, String::from("./app_node")).unwrap();
+
+        let db =
+            DB::open(&db_options, String::from("./app_node")).expect("unable to open rocks db.");
         let cache: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-        let db_arc = Arc::new(Mutex::new(db));
         let cache_arc = Arc::new(Mutex::new(cache));
+        let db_arc = Arc::new(Mutex::new(db));
 
         VmState {
             tree: SparseMerkleTree::new(
@@ -70,7 +72,7 @@ impl<
             Ok(i) => i,
             Err(e) => {
                 return Err(anyhow!(
-                    "Could not calculate root from last committed state. Critical error."
+                    "Could not calculate root from last committed state. Critical error. {e}"
                 ))
             }
         };
@@ -127,19 +129,13 @@ impl<
         })
     }
 
-    pub fn get(&self, key: &H256) -> Result<Option<V>, Error> {
-        match self.tree.get(key) {
-            Ok(i) => {
-                if i == V::zero() {
-                    Ok(None)
-                } else {
-                    Ok(Some(i))
-                }
-            }
-            Err(_e) => Err(anyhow!("Erroneous state.")),
-        }
+    pub fn get(&self, key: &H256, committed: bool) -> Result<Option<V>, Error> {
+        self.merkle_store
+            .get(key.as_slice(), committed)
+            .map_err(|e| anyhow!({ e }))
     }
 
+    //Gets from state even if not committed.
     pub fn get_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error> {
         let value = match self.tree.get(key) {
             Ok(i) => i,

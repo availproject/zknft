@@ -18,7 +18,7 @@ struct Data {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let mint_to =
-        String::from("0x41083dfd36361213d4e08e4002115f4e83d92b4e2bbc952fbcf56d2a2903eebb");
+        String::from("0xaeb464f569c86ae89b9728c809bfae9220d0827c3c9a304262349823a180e308");
     let json_data = std::fs::read_to_string("keypair.json").unwrap();
     let payments_url = "http://127.0.0.1:7001/tx";
 

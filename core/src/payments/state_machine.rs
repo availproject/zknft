@@ -35,13 +35,13 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
         let from_address_key = message.from.get_key();
         let to_address_key = message.to.get_key();
 
-        let from_account: Account = match self.state.get(&from_address_key) {
+        let from_account: Account = match self.state.get(&from_address_key, false) {
             Ok(Some(i)) => i,
             Err(_e) => return Err(anyhow!("Error in finding account details")),
             Ok(None) => Account::zero(),
         };
 
-        let to_account = match self.state.get(&to_address_key) {
+        let to_account = match self.state.get(&to_address_key, false) {
             Ok(Some(i)) => i,
             Err(_e) => return Err(anyhow!("Error in finding account details")),
             Ok(None) => Account::zero(),
@@ -64,6 +64,10 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
 
     fn get_state_with_proof(&self, key: &H256) -> Result<(Account, MerkleProof), Error> {
         self.state.get_with_proof(key)
+    }
+
+    fn get_state(&self, key: &H256) -> Result<Option<Account>, Error> {
+        self.state.get(key, true)
     }
 
     fn revert(&mut self) -> Result<(), Error> {

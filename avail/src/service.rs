@@ -1,21 +1,21 @@
 use core::time::Duration;
 
+use crate::avail::AvailBlobTransaction;
+use crate::avail::AvailBlock;
+use crate::avail::AvailHeader;
+use crate::avail::{Confidence, ExtrinsicsData};
 use anyhow::anyhow;
 use avail_subxt::api;
 use avail_subxt::api::runtime_types::bounded_collections::bounded_vec::BoundedVec;
+use avail_subxt::config::Header;
 use avail_subxt::primitives::AvailExtrinsicParams;
 use avail_subxt::AvailConfig;
-use avail_subxt::config::Header;
+use primitive_types::H256;
 use reqwest::StatusCode;
 use sp_core::crypto::Pair as PairTrait;
 use sp_keyring::sr25519::sr25519::Pair;
 use subxt::tx::PairSigner;
 use subxt::OnlineClient;
-use primitive_types::H256;
-use crate::avail::AvailBlobTransaction;
-use crate::avail::AvailBlock;
-use crate::avail::AvailHeader;
-use crate::avail::{Confidence, ExtrinsicsData};
 
 /// Runtime configuration for the DA service
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -36,7 +36,7 @@ pub struct DaProvider {
 }
 
 enum HeightOrHash {
-    Hash([u8; 32]), 
+    Hash([u8; 32]),
     Height(u64),
 }
 
@@ -64,13 +64,13 @@ impl DaProvider {
             node_client,
             light_client_url,
             signer,
-            app_id: config.app_id
+            app_id: config.app_id,
         }
     }
 }
 
-const POLLING_TIMEOUT: Duration = Duration::from_secs(60);
-const POLLING_INTERVAL: Duration = Duration::from_secs(2);
+const POLLING_TIMEOUT: Duration = Duration::from_secs(180);
+const POLLING_INTERVAL: Duration = Duration::from_secs(10);
 
 async fn wait_for_confidence(confidence_url: &str) -> anyhow::Result<()> {
     let start_time = std::time::Instant::now();
@@ -95,6 +95,7 @@ async fn wait_for_confidence(confidence_url: &str) -> anyhow::Result<()> {
             continue;
         }
 
+        println!("confidence reached after {:?}", start_time.elapsed());
         break;
     }
 
@@ -131,42 +132,42 @@ async fn wait_for_appdata(appdata_url: &str, block: u32) -> anyhow::Result<Extri
 impl DaProvider {
     // Make an RPC call to the node to get the finalized block at the given height, if one exists.
     // If no such block exists, block until one does.
-    async fn get_finalized_at(&self, height_or_hash: HeightOrHash) -> Result<AvailBlock, anyhow::Error> {
+    async fn get_finalized_at(
+        &self,
+        height_or_hash: HeightOrHash,
+    ) -> Result<AvailBlock, anyhow::Error> {
         let node_client = self.node_client.clone();
         let (header, hash) = match height_or_hash {
             HeightOrHash::Height(i) => {
-                let hash = match node_client
-                .rpc()
-                .block_hash(Some(i.into()))
-                .await? {
-                    Some(i) => i, 
-                    None => return Err(anyhow!("Hash for height {} not found.", i))
+                let hash = match node_client.rpc().block_hash(Some(i.into())).await? {
+                    Some(i) => i,
+                    None => return Err(anyhow!("Hash for height {} not found.", i)),
                 };
-                
+
                 let header = match node_client.rpc().header(Some(hash)).await? {
-                    Some(i) => i, 
-                    None => return Err(anyhow!("Header not found for hash: {}", hash))
+                    Some(i) => i,
+                    None => return Err(anyhow!("Header not found for hash: {}", hash)),
                 };
 
                 (header, hash)
-            }, 
+            }
             HeightOrHash::Hash(i) => {
                 let hash = H256::from(i);
 
                 let header = match node_client.rpc().header(Some(hash)).await? {
-                    Some(i) => i, 
-                    None => return Err(anyhow!("Header not found for hash: {}", hash))
+                    Some(i) => i,
+                    None => return Err(anyhow!("Header not found for hash: {}", hash)),
                 };
-               (header, hash)
+                (header, hash)
             }
         };
-        
+
         let height = header.number();
-        let _confidence_url = self.confidence_url(height.into());
+        let confidence_url = self.confidence_url(height.into());
         let appdata_url = self.appdata_url(height.into());
 
         //TODO: Wait for confidence.
-        //wait_for_confidence(&confidence_url).await?;
+        wait_for_confidence(&confidence_url).await?;
         let appdata = wait_for_appdata(&appdata_url, height).await?;
 
         let header = AvailHeader::new(header, hash);
@@ -175,6 +176,8 @@ impl DaProvider {
             .iter()
             .map(AvailBlobTransaction::new)
             .collect();
+        println!("raw data: {:?}", appdata);
+
         Ok(AvailBlock {
             header,
             transactions,
@@ -195,24 +198,21 @@ impl DaProvider {
         println!("Started submissions");
 
         let data_transfer = api::tx()
-        .data_availability()
-        .submit_data(BoundedVec(blob.to_vec()));
-        
+            .data_availability()
+            .submit_data(BoundedVec(blob.to_vec()));
+
         let extrinsic_params = AvailExtrinsicParams::new_with_app_id(self.app_id.into());
 
-        let tx_progress = self.node_client
-        .tx()
-        .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
-        .await?;
+        let tx_progress = self
+            .node_client
+            .tx()
+            .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
+            .await?;
 
         let (block_hash, index) = tx_progress
-        .wait_for_finalized_success()
-        .await
-        .map(|event| (
-                event.block_hash(),
-                event.extrinsic_hash(),
-            )
-        )?;
+            .wait_for_finalized_success()
+            .await
+            .map(|event| (event.block_hash(), event.extrinsic_hash()))?;
 
         Ok((block_hash, index))
     }

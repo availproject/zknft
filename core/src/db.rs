@@ -1,8 +1,8 @@
+use anyhow::{anyhow, Error};
 use rocksdb::{Options, DB};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{from_slice, to_vec};
 use sparse_merkle_tree::H256;
-use anyhow::{Error, anyhow};
 
 //Wrapper class to RocksDB which is used as backing storage.
 pub struct NodeDB {
@@ -31,7 +31,11 @@ impl NodeDB {
         match self.db.get(serialized_key) {
             Err(e) => Err(anyhow!("{}", e.to_string())),
             Ok(None) => Ok(None),
-            Ok(Some(i)) => Ok(from_slice(&i)?),
+            Ok(Some(i)) => {
+                println!("got valluueeee");
+
+                Ok(Some(from_slice(&i)?))
+            }
         }
     }
 

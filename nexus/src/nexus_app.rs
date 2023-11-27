@@ -25,7 +25,7 @@ use avail::avail::AvailBlobTransaction;
 use avail::service::DaProvider;
 use nft_methods::TRANSFER_ID as NFT_ID;
 use payments_methods::TRANSFER_ID as PAYMENTS_ID;
-use risc0_zkvm::{serde::from_slice, Receipt};
+use risc0_zkvm::{serde::from_slice, InnerReceipt, Receipt};
 use std::sync::{Arc, Mutex};
 
 const AGGREGATE_INTERVAL: Duration = Duration::from_secs(30);
@@ -38,6 +38,12 @@ pub struct NexusApp {
     da_start_height: u64,
     nft_da_service: DaProvider,
     payments_da_service: DaProvider,
+}
+
+pub struct NexusAppConfig {
+    pub da_start_height: u64,
+    pub nft_da_service: DaProvider,
+    pub payments_da_service: DaProvider,
 }
 
 pub struct AppState {
@@ -138,17 +144,15 @@ impl NexusApp {
         tree_state: Arc<Mutex<VmState<TransactionReceipt>>>,
         app_state: Arc<Mutex<AppState>>,
         db: Arc<Mutex<NodeDB>>,
-        da_start_height: u64,
-        nft_da_service: DaProvider,
-        payments_da_service: DaProvider,
+        config: NexusAppConfig,
     ) -> Self {
         Self {
             tree_state,
             app_state,
             db,
-            da_start_height,
-            nft_da_service,
-            payments_da_service,
+            da_start_height: config.da_start_height,
+            nft_da_service: config.nft_da_service,
+            payments_da_service: config.payments_da_service,
         }
     }
 
@@ -258,12 +262,14 @@ impl NexusApp {
             }
         };
         let hash = SubstrateH256::from(pointer.hash);
-
-        println!("Da hash: {:?}", hash);
+        println!("Da hash: {:?}, {:?}", hash, &block);
 
         match block.find_tx(&hash) {
             Some(i) => Ok(i),
-            None => Err(anyhow!("DA Transaction not found in block.")),
+            None => {
+                println!("Could not find tx");
+                Err(anyhow!("DA Transaction not found in block."))
+            }
         }
     }
 
@@ -351,6 +357,7 @@ impl NexusApp {
 
     pub fn verify_payments_batch(&self, param: SubmitProofParam, blob: &[u8]) -> Result<(), Error> {
         let mut app_state = self.app_state.lock().unwrap();
+
         let session_receipt: Receipt = match bincode::deserialize(&param.session_receipt) {
             Ok(i) => i,
             Err(e) => {

@@ -13,7 +13,7 @@ use nft_core::{
     utils::{hex_string_to_u8_array, u8_array_to_hex_string},
 };
 use primitive_types::U256;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::{traits::Value, H256};
 use std::sync::Arc;
@@ -43,13 +43,48 @@ pub struct BuyNftQuery {
     nft_receiver: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransferStatus {
     NotInitiated = 0,
     HoldInProgress = 1,
     WaitingForPayment = 2,
     PaymentDone = 3,
     TransferInProgress = 4,
+}
+
+impl Serialize for TransferStatus {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let enum_value = match self {
+            Self::NotInitiated => 0,
+            Self::HoldInProgress => 1,
+            Self::WaitingForPayment => 2,
+            Self::PaymentDone => 3,
+            Self::TransferInProgress => 4,
+        };
+
+        serializer.serialize_u32(enum_value)
+    }
+}
+
+impl<'de> Deserialize<'de> for TransferStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let enum_value = u32::deserialize(deserializer)?;
+
+        match enum_value {
+            0 => Ok(Self::NotInitiated),
+            1 => Ok(Self::HoldInProgress),
+            2 => Ok(Self::WaitingForPayment),
+            3 => Ok(Self::PaymentDone),
+            4 => Ok(Self::TransferInProgress),
+            _ => Err(serde::de::Error::custom("Invalid enum value")),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -63,6 +98,7 @@ pub async fn check_payment(
     service: Arc<Mutex<AppNode<Nft, NftTransaction, NftStateMachine>>>,
     id: String,
 ) -> Result<ClientReply<CheckPaymentReply>, Infallible> {
+    println!("check status is called... 🫣🫣🫣🫣🫣🫣\n");
     let verifying_key = Address(key.verification_key().to_bytes());
     let mut bytes = [0u8; 32];
     U256::from_dec_str(&id).unwrap().to_big_endian(&mut bytes);
@@ -70,22 +106,15 @@ pub async fn check_payment(
     let app = service.lock().await;
 
     //Check if NFT is now held.
-    let nft_future: Option<Future> = match app.get_state_with_proof(&H256::from(nft_id.0)).await {
-        Ok((nft, _merkle_proof)) => {
-            let root = match app.get_root().await {
-                Ok(i) => i,
-                Err(e) => return Ok(ClientReply::Error(e)),
-            };
-
-            match nft.future {
-                None => None,
-                Some(i) => Some(i),
-            }
-        }
+    let nft_future_opt: Option<Future> = match app.get_state(&H256::from(nft_id.0)).await {
+        Ok(nft) => match nft {
+            Some(i) => i.future,
+            None => return Ok(ClientReply::Error(anyhow!("Nft not minted."))),
+        },
         Err(e) => return Ok(ClientReply::Error(e)),
     };
 
-    let nft_future: Future = match nft_future {
+    let nft_future: Future = match nft_future_opt {
         Some(i) => i,
         //If no future is registered, check if tx is in pool.
         None => {
@@ -102,6 +131,8 @@ pub async fn check_payment(
                     NftTransactionMessage::Mint(_) => continue,
                     NftTransactionMessage::Trigger(_) => continue,
                     NftTransactionMessage::Transfer(i) => {
+                        println!("Hold in progress 😎😎 \n");
+
                         if i.id == nft_id {
                             return Ok(ClientReply::Ok(CheckPaymentReply {
                                 nft_id: id,

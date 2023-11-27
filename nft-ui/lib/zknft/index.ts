@@ -58,6 +58,7 @@ export async function getForSaleNFTs(): Promise<NFT[]> {
 
   try {
     const response = await fetch(url, { cache: 'no-store' });
+    const custodian = bytesToHex(Uint8Array.from(custodianAddress));
 
     if (response.ok) {
       // Successful response, process the data
@@ -77,7 +78,8 @@ export async function getForSaleNFTs(): Promise<NFT[]> {
             nonce: nft.nonce,
             metadata: nft.metadata,
             price: 10,
-            currency_symbol: "PVL"
+            currencySymbol: "PVL",
+            custodian
           }
         )
       }
@@ -132,10 +134,12 @@ export async function buyNFT(paymentSender: string, nftId: string): Promise<void
 }
 
 export async function checkPayment(nft_id: string): Promise<CheckPaymentReply> {
+  console.log("CHEEECCKKK BROOOOOOO");
+
   const url = "http://127.0.0.1:7000/check-payment/";
 
   const response = await fetch(url + nft_id, { cache: 'no-store' });
-
+  console.log(response.body);
   if (response.ok) {
     const status: CheckPaymentReply = await response.json();
 

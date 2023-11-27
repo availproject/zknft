@@ -2,16 +2,14 @@ mod nexus_app;
 mod store;
 mod types;
 
-use crate::nexus_app::{AggregatedBatch, AppState};
+use crate::nexus_app::{AggregatedBatch, AppState, NexusAppConfig};
+use avail::service::{DaProvider, DaServiceConfig};
 use nexus_app::{start_rpc_server, NexusApp};
 use nft_core::{db::NodeDB, state::VmState, types::BatchHeader};
 use nft_methods::TRANSFER_ID as NFT_ID;
-use avail::service::{DaProvider, DaServiceConfig};
 use payments_methods::TRANSFER_ID;
 use sparse_merkle_tree::H256;
 use std::sync::{Arc, Mutex};
-
-
 
 fn main() {
     println!(
@@ -52,26 +50,38 @@ fn main() {
     )));
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let nft_da_service = rt.block_on(async move {DaProvider::new(DaServiceConfig {
-        light_client_url: String::from("http://127.0.0.1:8000"), 
-        node_client_url: String::from("wss://kate.avail.tools:443/ws"),
-        seed: String::from("rose label choose orphan garlic upset scout payment first have boil stamp"), 
-        app_id: 7,
-    }).await});
-    let payments_da_service = rt.block_on(async move {DaProvider::new(DaServiceConfig {
-        light_client_url: String::from("http://127.0.0.1:8001"), 
-        node_client_url: String::from("wss://kate.avail.tools:443/ws"),
-        seed: String::from("rose label choose orphan garlic upset scout payment first have boil stamp"), 
-        app_id: 8,
-    }).await});
+    let nft_da_service = rt.block_on(async move {
+        DaProvider::new(DaServiceConfig {
+            light_client_url: String::from("http://127.0.0.1:8000"),
+            node_client_url: String::from("wss://goldberg.avail.tools:443/ws"),
+            seed: String::from(
+                "rose label choose orphan garlic upset scout payment first have boil stamp",
+            ),
+            app_id: 7,
+        })
+        .await
+    });
+    let payments_da_service = rt.block_on(async move {
+        DaProvider::new(DaServiceConfig {
+            light_client_url: String::from("http://127.0.0.1:8001"),
+            node_client_url: String::from("wss://goldberg.avail.tools:443/ws"),
+            seed: String::from(
+                "rose label choose orphan garlic upset scout payment first have boil stamp",
+            ),
+            app_id: 8,
+        })
+        .await
+    });
 
     let mut app = NexusApp::new(
-        shared_tree, 
-        shared_app_state, 
-        shared_db, 
-        490325,
-        nft_da_service, 
-        payments_da_service,
+        shared_tree,
+        shared_app_state,
+        shared_db,
+        NexusAppConfig {
+            da_start_height: 490325,
+            nft_da_service,
+            payments_da_service,
+        },
     );
     let app_clone = app.clone();
 

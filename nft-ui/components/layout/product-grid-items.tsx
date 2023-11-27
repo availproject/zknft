@@ -14,7 +14,7 @@ export default function ProductGridItems({ products }: { products: NFT[] }) {
               label={{
                 title: product.metadata.name,
                 amount: product.price.toLocaleString(),
-                currencyCode: product.currency_symbol,
+                currencyCode: product.currencySymbol,
               }}
               src={product.metadata.url}
               fill

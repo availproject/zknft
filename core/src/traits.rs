@@ -17,6 +17,7 @@ pub trait StateMachine<V, T: Clone + DeserializeOwned + Serialize + Encode + Dec
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<V>, TransactionReceipt), Error>;
     fn get_state_with_proof(&self, key: &H256) -> Result<(V, MerkleProof), Error>;
+    fn get_state(&self, key: &H256) -> Result<Option<V>, Error>;
     fn revert(&mut self) -> Result<(), Error>;
     fn commit(&mut self) -> Result<(), Error>;
     fn get_root(&self) -> Result<H256, Error>;

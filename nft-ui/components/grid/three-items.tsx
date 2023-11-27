@@ -28,7 +28,7 @@ function ThreeItemGridItem({
             position: size === 'full' ? 'center' : 'bottom',
             title: item.metadata.name,
             amount: item.price.toLocaleString(),
-            currencyCode: item.currency_symbol,
+            currencyCode: item.currencySymbol,
           }}
         />
       </Link>

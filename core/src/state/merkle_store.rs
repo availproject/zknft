@@ -21,32 +21,68 @@ impl MerkleStore {
         MerkleStore { db, cache }
     }
 
-    pub fn get<V: DeserializeOwned>(&self, serialized_key: &[u8]) -> Result<Option<V>, Error> {
-        let cache = match self.cache.lock() {
-            Ok(i) => i,
-            Err(e) => return Err(Error::Store(String::from("No lock obtained."))),
-        };
+    pub fn get<V: DeserializeOwned>(
+        &self,
+        serialized_key: &[u8],
+        committed: bool,
+    ) -> Result<Option<V>, Error> {
+        if !committed {
+            let cache = match self.cache.lock() {
+                Ok(i) => i,
+                Err(e) => return Err(Error::Store(String::from("No lock obtained."))),
+            };
 
-        match cache.get(serialized_key) {
-            Some(i) => {
-                //Empty vectors mean the value was deleted.
-                if !i.is_empty() {
-                    Ok(from_slice::<Option<V>>(&i).unwrap())
-                } else {
-                    Ok(None)
+            match cache.get(serialized_key) {
+                Some(i) => {
+                    //Empty vectors mean the value was deleted.
+                    if !i.is_empty() {
+                        Ok(from_slice::<Option<V>>(&i).unwrap())
+                    } else {
+                        Ok(None)
+                    }
+                }
+                None => {
+                    let db = match self.db.lock() {
+                        Ok(i) => i,
+                        Err(e) => return Err(Error::Store(String::from("No lock obtained."))),
+                    };
+
+                    match db.get(serialized_key) {
+                        Ok(Some(i)) => {
+                            println!("now trying to deserialize to value..");
+                            let deserialized_value: V = match from_slice(&i) {
+                                Ok(v) => v,
+                                Err(e) => return Err(Error::Store(e.to_string())),
+                            };
+
+                            Ok(Some(deserialized_value))
+                        }
+                        Ok(None) => Ok(None),
+                        Err(e) => {
+                            println!("OHh nooo some error 🧐 {:?}", serialized_key);
+                            Err(Error::Store(e.to_string()))
+                        }
+                    }
                 }
             }
-            None => {
-                let db = match self.db.lock() {
-                    Ok(i) => i,
-                    Err(e) => return Err(Error::Store(String::from("No lock obtained."))),
-                };
+        } else {
+            let db = match self.db.lock() {
+                Ok(i) => i,
+                Err(e) => return Err(Error::Store(String::from("No lock obtained."))),
+            };
 
-                match db.get(serialized_key) {
-                    Err(e) => Err(Error::Store(e.to_string())),
-                    Ok(None) => Ok(None),
-                    Ok(Some(i)) => Ok(from_slice::<Option<V>>(&i).unwrap()),
+            match db.get(serialized_key) {
+                Ok(Some(i)) => {
+                    println!("now trying to deserialize to value..");
+                    let deserialized_value: V = match from_slice(&i) {
+                        Ok(v) => v,
+                        Err(e) => return Err(Error::Store(e.to_string())),
+                    };
+
+                    Ok(Some(deserialized_value))
                 }
+                Ok(None) => Ok(None),
+                Err(e) => Err(Error::Store(e.to_string())),
             }
         }
     }
@@ -84,14 +120,17 @@ impl MerkleStore {
             Ok(i) => i,
             Err(e) => return Err(Error::Store(String::from("No lock obtained."))),
         };
-
+        println!("committing {}", cache.len());
         for (key, value) in cache.iter() {
             if !value.is_empty() {
+                println!("Added to db: {:?}", &key);
                 match db.put(key, value) {
                     Err(e) => return Err(Error::Store(e.to_string())),
                     _ => (),
                 }
             } else {
+                //Getting from underlying db below so as to not deserialise the
+                //value as it is not required.
                 match db.get(key) {
                     Err(e) => return Err(Error::Store(e.to_string())),
                     Ok(Some(_)) => match db.delete(key) {
@@ -124,13 +163,13 @@ impl<V: DeserializeOwned> StoreReadOps<V> for MerkleStore {
             Ok(i) => i,
         };
 
-        self.get(&serialized_key)
+        self.get(&serialized_key, false)
     }
 
     fn get_leaf(&self, leaf_key: &H256) -> Result<Option<V>, Error> {
         let key = leaf_key.as_slice();
 
-        self.get(key)
+        self.get(key, false)
     }
 }
 

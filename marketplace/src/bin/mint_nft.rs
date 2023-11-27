@@ -33,14 +33,15 @@ async fn main() -> Result<(), Error> {
 
     // Create a SigningKey from the deserialized keypair_bytes
     let signing_key: SigningKey = SigningKey::from(keypair_data.keypair_bytes);
+
     let metadata: NftMetadata = NftMetadata {
         url: String::from("https://storage.googleapis.com/nftimagebucket/tokens/0x60e4d786628fea6478f785a6d7e704777c86a7c6/preview/5933.png"),
         description: String::from("Demo NFT, not real."), 
-        name: String::from("Ape 5"),
+        name: String::from("Ape 4"),
     };
-    let mut bytes: [u8; 32] = [0u8; 32];
 
-    U256::from_dec_str("5").unwrap().to_big_endian(&mut bytes);
+    let mut bytes: [u8; 32] = [0u8; 32];
+    U256::from_dec_str("4").unwrap().to_big_endian(&mut bytes);
     println!("big endian: {:?}", &bytes);
 
     let mint: Mint = Mint {
