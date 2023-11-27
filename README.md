@@ -36,6 +36,6 @@ The Payments UI is the user interface designed for interacting with the Payments
 
 To get started with this project, follow these steps:
 
-1. Clone the repository: `git clone https://github.com/availproject/zk-nft.git`
-2. Navigate to the project directory: `cd zk-nft`
+1. Clone the repository: `git clone https://github.com/availproject/zknft.git`
+2. Navigate to the project directory: `cd zknft`
 3. Follow the specific README files in each crate to set up and run the respective components.
