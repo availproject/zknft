@@ -13,42 +13,85 @@ import {
   faUser,
   faCopy,
 } from "@fortawesome/free-solid-svg-icons";
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function Home() {
   const [amount, setAmount] = useState<null | number>(null);
   const [to, setTo] = useState('');
-  const [amountOk, setAmountOk] = useState(false);
-  const [toOk, setToOk] = useState(false);
+  const router = useRouter();
   const [myValue, setMyValue] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const preSetTo: string | null = searchParams.get("to");
+  const preSetAmount: string | null = searchParams.get("amount");
+  const preSetFrom: string | null = searchParams.get("from");
+  const origin: string | null = searchParams.get("origin") || null;
+  const originURL = decodeURIComponent(origin as string);
+  const urlWithoutQuotes = originURL.replace(/'/g, '');
+
+  const amountOk = (): boolean => {
+    if (amount != 0 && amount != null) {
+      return true;
+    }
+
+    if (preSetAmount != null && parseInt(preSetAmount) != 0) {
+      return true;
+    }
+
+    return false;
+  }
+
+  const toOk = (): boolean => {
+    if (to !== '' && (to.length === 64 || to.length === 66)) {
+      return true;
+    }
+
+    if (preSetTo && preSetTo !== '' && (preSetTo.length === 64 || preSetTo.length === 66)) {
+      return true;
+    }
+
+    return false;
+  }
 
   const handleAmountChange = (event: ChangeEvent<HTMLInputElement>) => {
     const amount = parseInt(event.target.value);
     setAmount(parseInt(event.target.value));
 
-    if (amount != 0 || amount != null) {
-      setAmountOk(true)
-    }
+    // if (amount != 0 || amount != null) {
+    //   setAmountOk(true)
+    // }
   };
 
   const handleToChange = (event: ChangeEvent<HTMLInputElement>) => {
     const to = event.target.value.toLowerCase();
     setTo(to);
 
-    if (to !== '' && (to.length === 64 || to.length === 66)) {
-      setToOk(true);
-    }
+    // if (to !== '' && (to.length === 64 || to.length === 66)) {
+    //   setToOk(true);
+    // }
   };
 
   const handleSend = () => {
-    console.log(amountOk, toOk);
-    if (!amountOk || !toOk) {
+    if (preSetFrom && preSetFrom !== myValue) {
+      alert!("From does not match your account.");
+
+      return;
+    }
+    console.log(amountOk(), toOk());
+    if (!amountOk() || !toOk()) {
       return;
     }
 
-    transfer(to, BigInt(amount as number)).then(() => { });
+    const selectedAmount = preSetAmount || amount as number | string;
+    const selectedTo = preSetTo && preSetTo !== '' ? preSetTo : to;
+
+    transfer(selectedTo, BigInt(selectedAmount)).then(() => {
+      if (origin) {
+        console.log(originURL, origin)
+        console.log(urlWithoutQuotes);
+        router.push(`${urlWithoutQuotes}`);
+      }
+    });
   };
 
   const handleCopyClick = () => {
@@ -125,34 +168,53 @@ export default function Home() {
         </div>
 
         <div className="relative flex place-items-center before:absolute before:h-[100px] before:w-[560px] before:-translate-x-1/2 before:rounded-full ">
-          <input
+          {preSetTo ? <input
+            type="text"
+            name="transfer-to"
+            placeholder="abcd..."
+            autoComplete="off"
+            disabled={true}
+            value={preSetTo}
+            onChange={handleToChange}
+            className="w-full text-ellipsis overflow-hidden text-xs relative rounded-lg border bg-white pl-4 pr-8 py-2  text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
+          /> : <input
             type="text"
             name="transfer-to"
             placeholder="abcd..."
             autoComplete="off"
             value={to}
-            onChange={handleToChange}
             className="w-full text-ellipsis overflow-hidden text-xs relative rounded-lg border bg-white pl-4 pr-8 py-2  text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
-          />
+          />}
           <div className="absolute right-0 top-0 mr-3 flex h-full items-center">
             To
           </div>
         </div>
         <div className="relative mt-2 flex place-items-center before:absolute before:h-[50px] before:w-[660px] before:-translate-x-1/2 before:rounded-full">
-          <input
-            type="number"
-            name="amount"
-            autoComplete="off"
-            placeholder="not all your money."
-            value={amount as number}
-            onChange={handleAmountChange}
-            className="w-max-[560px] relative w-full lg:w-160 xl:w-full rounded-lg border bg-white px-4 py-2 text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
-          />
+          {preSetAmount ?
+            <input
+              type="number"
+              name="amount"
+              autoComplete="off"
+              placeholder="not all your money."
+              value={parseInt(preSetAmount)}
+              disabled={true}
+              className="w-max-[560px] relative w-full lg:w-160 xl:w-full rounded-lg border bg-white px-4 py-2 text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
+            /> :
+            <input
+              type="number"
+              name="amount"
+              autoComplete="off"
+              placeholder="not all your money."
+              value={amount as number}
+              onChange={handleAmountChange}
+              className="w-max-[560px] relative w-full lg:w-160 xl:w-full rounded-lg border bg-white px-4 py-2 text-sm text-black placeholder:text-neutral-500 dark:border-neutral-800 dark:bg-transparent dark:text-white dark:placeholder:text-neutral-400"
+            />
+          }
           <div className="absolute right-0 top-0 mr-3 flex h-full items-center">
             Amount
           </div>
         </div>
-        <button onClick={handleSend} disabled={!amountOk || !toOk} className="mt-6 ml-auto mr-auto w-[100px] bg-transparent hover:bg-gray-900 text-white font-semibold py-2 px-4 border border-gray-700 rounded shadow disabled:bg-gray-900 disabled:cursor-not-allowed">
+        <button onClick={handleSend} disabled={!amountOk() || !toOk()} className="mt-6 ml-auto mr-auto w-[100px] bg-transparent hover:bg-gray-900 text-white font-semibold py-2 px-4 border border-gray-700 rounded shadow disabled:bg-gray-900 disabled:cursor-not-allowed">
           Confirm
         </button>
       </div>

@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 sparse-merkle-tree = { path = "../../sparse-merkle-tree" }
-nft_core = { path = "../core", features = ["native-metal"] }
+nft_core = { path = "../core", features = ["native"] }
 actix-web = "4.3.1"
 tokio = "1.30.0"
 nft-methods = { path = "../nft_app/methods" }

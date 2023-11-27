@@ -1,8 +1,8 @@
-import { NFT, Menu, MenuType, NFTResponseObject, NftMetadata, Mint, H256, $transactionMessage, NftTransaction, BuyNftQuery, $payTransactionMessage, TransactionMessage } from './types';
-import { to_H256, to_H512, hexToAddress, byteArrayToHexString, toBigEndian } from "./utils";
+import { NFT, Menu, MenuType, NFTResponseObject, BuyNftQuery, CheckPaymentReply } from './types';
+import { hexToAddress, } from "./utils";
 import * as ed from '@noble/ed25519';
-import { hexToBytes, bytesToHex, hexToNumberString } from "web3-utils";
-import { createHash } from "crypto";
+import { bytesToHex, hexToNumberString } from "web3-utils";
+import { sha512 } from '@noble/hashes/sha512';
 
 const custodianAddress = [
   110, 80, 211, 15, 198, 63, 39, 13, 44, 74, 228, 84, 127, 23, 174, 86,
@@ -28,15 +28,12 @@ export function getLocalStorage<T>(key: string): T | null {
   }
 }
 
-export async function getPrivateKey(): Promise<Uint8Array> {
+export function getPrivateKey(): Uint8Array {
   let seed = getLocalStorage("my-private-key")
-
   if (seed === null) {
     const privKey = ed.utils.randomPrivateKey();
 
     setLocalStorage("my-private-key", Array.from(privKey));
-
-    console.log(await ed.getPublicKeyAsync(privKey));
 
     return privKey;
   } else {
@@ -46,12 +43,22 @@ export async function getPrivateKey(): Promise<Uint8Array> {
   }
 }
 
+export function getBuyerAddress(): string {
+  ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
+
+  let privateKey = getPrivateKey();
+  let publicKey: Uint8Array = ed.getPublicKey(privateKey);
+
+  return bytesToHex(publicKey);
+}
+
 export async function getForSaleNFTs(): Promise<NFT[]> {
   console.log("get for sale called.")
   const url = 'http://127.0.0.1:7000/listed-nfts/'; // Replace with the actual URL
 
   try {
     const response = await fetch(url, { cache: 'no-store' });
+    const custodian = bytesToHex(Uint8Array.from(custodianAddress));
 
     if (response.ok) {
       // Successful response, process the data
@@ -62,14 +69,20 @@ export async function getForSaleNFTs(): Promise<NFT[]> {
       for (const nft of jsonData) {
         nfts_to_return.push(
           {
-            ...nft,
+            id: hexToNumberString(bytesToHex(Uint8Array.from(nft.id))),
+            owner: bytesToHex(Uint8Array.from(nft.owner)),
+            future: nft.future ? {
+              to: bytesToHex(Uint8Array.from(nft.future.to)),
+              commitment: nft.future.commitment
+            } : undefined,
+            nonce: nft.nonce,
+            metadata: nft.metadata,
             price: 10,
-            currency_symbol: "PVL"
+            currencySymbol: "PVL",
+            custodian
           }
         )
       }
-      // Now you can work with the JSON data
-      console.log(nfts_to_return.length);
 
       return nfts_to_return;
     } else {
@@ -83,9 +96,16 @@ export async function getForSaleNFTs(): Promise<NFT[]> {
   }
 }
 
-export async function buyNFT(paymentSender: string, nftId: number[]): Promise<void> {
+export async function buyNFT(paymentSender: string, nftId: string): Promise<void> {
   console.log("get for sale called.")
   const url = 'http://127.0.0.1:7000/buy-nft/'; // Replace with the actual URL
+  //Safety check
+  try {
+    parseInt(nftId);
+    hexToAddress(paymentSender);
+  } catch (error) {
+    throw error;
+  }
 
   try {
     let privateKey: Uint8Array = await getPrivateKey();
@@ -93,7 +113,7 @@ export async function buyNFT(paymentSender: string, nftId: number[]): Promise<vo
     let hex: string = bytesToHex(publicKey);
 
     let buyNftQuery: BuyNftQuery = {
-      nft_id: hexToNumberString(bytesToHex(Uint8Array.from(nftId))),
+      nft_id: nftId,
       payment_sender: paymentSender,
       nft_receiver: hex,
     };
@@ -113,16 +133,20 @@ export async function buyNFT(paymentSender: string, nftId: number[]): Promise<vo
   }
 }
 
-export async function checkPayment(nft_id: number[]): Promise<boolean> {
+export async function checkPayment(nft_id: string): Promise<CheckPaymentReply> {
+  console.log("CHEEECCKKK BROOOOOOO");
+
   const url = "http://127.0.0.1:7000/check-payment/";
 
-  const response = await fetch(url + hexToNumberString(bytesToHex(Uint8Array.from(nft_id))), { cache: 'no-store' });
-
+  const response = await fetch(url + nft_id, { cache: 'no-store' });
+  console.log(response.body);
   if (response.ok) {
-    return true;
+    const status: CheckPaymentReply = await response.json();
+
+    console.log(status);
+    return status
   } else {
-    console.error('Request failed with status:', response.status);
-    return false;
+    throw Error("Request failed with status: " + response.status.toString())
   }
 }
 

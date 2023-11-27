@@ -1,35 +1,32 @@
-
-
 use nft_core::{
     db::NodeDB,
-    state::VmState,
-    types::{BatchHeader, TransactionReceipt, DABatch},
-    nft::types::NftTransaction, 
+    nft::types::NftTransaction,
     payments::types::Transaction as PaymentsTransaction,
+    state::VmState,
+    types::{BatchHeader, DABatch, TransactionReceipt},
 };
+use primitive_types::H256 as SubstrateH256;
 use serde::{Deserialize, Serialize};
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::H256;
-use primitive_types::H256 as SubstrateH256;
 
 use std::time::Duration;
 
-use crate::types::{AppChain, DaTxPointer, SubmitProofParam, ReceiptQuery};
+use crate::types::{AppChain, DaTxPointer, ReceiptQuery, SubmitProofParam};
 
 //Below imports for HTTP server.
-
 
 use actix_web::HttpResponse;
 use actix_web::{web, App, HttpServer, Responder};
 
-use avail::service::DaProvider;
+use anyhow::anyhow;
+use anyhow::Error;
 use avail::avail::AvailBlobTransaction;
+use avail::service::DaProvider;
 use nft_methods::TRANSFER_ID as NFT_ID;
 use payments_methods::TRANSFER_ID as PAYMENTS_ID;
-use risc0_zkvm::{serde::from_slice, Receipt};
+use risc0_zkvm::{serde::from_slice, InnerReceipt, Receipt};
 use std::sync::{Arc, Mutex};
-use anyhow::Error;
-use anyhow::anyhow;
 
 const AGGREGATE_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -41,6 +38,12 @@ pub struct NexusApp {
     da_start_height: u64,
     nft_da_service: DaProvider,
     payments_da_service: DaProvider,
+}
+
+pub struct NexusAppConfig {
+    pub da_start_height: u64,
+    pub nft_da_service: DaProvider,
+    pub payments_da_service: DaProvider,
 }
 
 pub struct AppState {
@@ -141,17 +144,15 @@ impl NexusApp {
         tree_state: Arc<Mutex<VmState<TransactionReceipt>>>,
         app_state: Arc<Mutex<AppState>>,
         db: Arc<Mutex<NodeDB>>,
-        da_start_height: u64,
-        nft_da_service: DaProvider,
-        payments_da_service: DaProvider,
+        config: NexusAppConfig,
     ) -> Self {
         Self {
             tree_state,
             app_state,
             db,
-            da_start_height,
-            nft_da_service,
-            payments_da_service,
+            da_start_height: config.da_start_height,
+            nft_da_service: config.nft_da_service,
+            payments_da_service: config.payments_da_service,
         }
     }
 
@@ -163,15 +164,14 @@ impl NexusApp {
         }
     }
 
-    fn aggregate_proofs(
-        &mut self,
-    ) {
+    fn aggregate_proofs(&mut self) {
         let mut app_state = self.app_state.lock().unwrap();
         let mut tree_state = self.tree_state.lock().unwrap();
         let db = self.db.lock().unwrap();
         println!(
             "aggregating proofs: {:?}, {:?}",
-            app_state.verified_payments_batches.len(), app_state.verified_payments_batches.len()
+            app_state.verified_payments_batches.len(),
+            app_state.verified_payments_batches.len()
         );
         let mut receipts_to_add: Vec<TransactionReceipt> = vec![];
 
@@ -202,12 +202,12 @@ impl NexusApp {
                 proof_number: app_state.last_aggregated_batch.proof_number + 1,
                 receipts_root: state_update.post_state_root,
             };
-            
+
             //TODO: Ensure there are no race conditions here, so a new batch, not aggregated is not stored.
             //Most probably, there are no race conditions, as we lock app_state here.
             let last_aggregated_nft_batch = app_state.get_last_nft_verified_batch();
             let last_aggregated_payments_batch = app_state.get_last_payments_verified_batch();
-            
+
             //TODO: Set this through a method.
             app_state.last_aggregated_batch = last_aggregated_batch.clone();
             app_state.last_aggregated_nft_batch = last_aggregated_nft_batch;
@@ -231,44 +231,45 @@ impl NexusApp {
                 Ok(()) => (),
                 Err(e) => panic!("Could not start node. {:?}", e),
             }
+
+            tree_state.commit();
         }
 
         app_state.verified_nft_batches.clear();
         app_state.verified_payments_batches.clear();
     }
 
-    async fn get_da_tx(
-        &self, 
-        pointer: DaTxPointer,
-    ) -> Result<AvailBlobTransaction, Error> {
+    async fn get_da_tx(&self, pointer: DaTxPointer) -> Result<AvailBlobTransaction, Error> {
         let da_service = match pointer.chain {
-            AppChain::Nft => &self.nft_da_service, 
-            AppChain::Payments => &self.payments_da_service
+            AppChain::Nft => &self.nft_da_service,
+            AppChain::Payments => &self.payments_da_service,
         };
 
-        println!("{}", match pointer.chain {
-            AppChain::Nft => "NFT", 
-            AppChain::Payments => "Payments"
-        });
+        println!(
+            "{}",
+            match pointer.chain {
+                AppChain::Nft => "NFT",
+                AppChain::Payments => "Payments",
+            }
+        );
 
-        let block = match da_service
-                .get_block_with_hash(pointer.block_hash)
-                .await
-            {
-                Ok(i) => i,
-                Err(e) => {
-                    return Err(
-                        anyhow!("Error fetching data {:?}",e)
-                    ); // Retry the same height on error
-                }
-            };
+        let block = match da_service.get_block_with_hash(pointer.block_hash).await {
+            Ok(i) => i,
+            Err(e) => {
+                println!("Error getting block: {:?}", e);
+
+                return Err(anyhow!("Error fetching data {:?}", e)); // Retry the same height on error
+            }
+        };
         let hash = SubstrateH256::from(pointer.hash);
-
-        println!("Da hash: {:?}", hash);
+        println!("Da hash: {:?}, {:?}", hash, &block);
 
         match block.find_tx(&hash) {
             Some(i) => Ok(i),
-            None => Err(anyhow!("DA Transaction not found in block."))
+            None => {
+                println!("Could not find tx");
+                Err(anyhow!("DA Transaction not found in block."))
+            }
         }
     }
 
@@ -284,19 +285,25 @@ impl NexusApp {
         }
     }
 
-    pub fn verify_nft_batch(
-        &self,
-        param: SubmitProofParam,
-        blob: &[u8],
-    ) -> Result<(), Error> {
+    pub fn verify_nft_batch(&self, param: SubmitProofParam, blob: &[u8]) -> Result<(), Error> {
         let mut app_state = self.app_state.lock().unwrap();
         let _da_batch: DABatch<NftTransaction> = match bincode::deserialize(blob) {
-            Ok(i) => i, 
-            Err(e) => return Err(anyhow!("Da batch deserialization failed due to error: {:?}", e))
+            Ok(i) => i,
+            Err(e) => {
+                return Err(anyhow!(
+                    "Da batch deserialization failed due to error: {:?}",
+                    e
+                ))
+            }
         };
         let session_receipt: Receipt = match bincode::deserialize(&param.session_receipt) {
-            Ok(i) => i,  
-            Err(e) => return Err(anyhow!("proof deserialization failed due to error: {:?}", e))
+            Ok(i) => i,
+            Err(e) => {
+                return Err(anyhow!(
+                    "proof deserialization failed due to error: {:?}",
+                    e
+                ))
+            }
         };
 
         // if da_batch.header != batch.header {
@@ -309,9 +316,7 @@ impl NexusApp {
         match session_receipt.verify(NFT_ID) {
             Ok(_i) => Ok::<(), Error>(()),
             //TODO: Simplify this chaining.
-            Err(_e) => {
-                return Err(anyhow!("Unable to verify proof."))
-            }
+            Err(_e) => return Err(anyhow!("Unable to verify proof.")),
         };
 
         println!("Verified NFT batch. Will be aggregated in the next cycle.");
@@ -350,30 +355,35 @@ impl NexusApp {
         }
     }
 
-    pub fn verify_payments_batch(
-        &self,
-        param: SubmitProofParam,
-        blob: &[u8],
-    ) -> Result<(), Error> {
+    pub fn verify_payments_batch(&self, param: SubmitProofParam, blob: &[u8]) -> Result<(), Error> {
         let mut app_state = self.app_state.lock().unwrap();
+
         let session_receipt: Receipt = match bincode::deserialize(&param.session_receipt) {
-            Ok(i) => i, 
-            Err(e) => return Err(anyhow!("proof deserialization failed due to error: {:?}", e))
+            Ok(i) => i,
+            Err(e) => {
+                return Err(anyhow!(
+                    "proof deserialization failed due to error: {:?}",
+                    e
+                ))
+            }
         };
         let _da_batch: DABatch<PaymentsTransaction> = match bincode::deserialize(blob) {
-            Ok(i) => i, 
-            Err(e) => return Err(anyhow!("Da batch deserialization failed due to error: {:?}", e))
+            Ok(i) => i,
+            Err(e) => {
+                return Err(anyhow!(
+                    "Da batch deserialization failed due to error: {:?}",
+                    e
+                ))
+            }
         };
-        
+
         //TODO: Da validity check.
 
         println!("verifying payments batch.");
         match session_receipt.verify(PAYMENTS_ID) {
             Ok(_i) => Ok::<(), Error>(()),
             //TODO: Simplify this chaining.
-            Err(_e) => {
-                return Err(anyhow!("Unable to verify proof."))
-            }
+            Err(_e) => return Err(anyhow!("Unable to verify proof.")),
         };
 
         let batch_header: BatchHeader = from_slice(&session_receipt.journal).unwrap();
@@ -386,12 +396,10 @@ impl NexusApp {
         if receipts_root == batch_header.receipts_root
             && last_batch_header.state_root == batch_header.pre_state_root
         {
-            app_state
-                .verified_payments_batches
-                .push(BatchWithReceipts {
-                    header: batch_header,
-                    receipts: param.receipts,
-                });
+            app_state.verified_payments_batches.push(BatchWithReceipts {
+                header: batch_header,
+                receipts: param.receipts,
+            });
 
             println!("Verified and added payments batch. Will be aggregated in the next cycle.");
 
@@ -407,12 +415,10 @@ async fn submit_batch(
     call: web::Json<SubmitProofParam>,
 ) -> impl Responder {
     let deserialized_call: SubmitProofParam = call.into_inner();
-    
+
     match service.submit_batch(deserialized_call).await {
         Ok(()) => HttpResponse::Ok().json("Proof verified and submitted successfully."),
-        Err(e) => {
-            HttpResponse::InternalServerError().body("Internal error.")
-        }
+        Err(e) => HttpResponse::InternalServerError().body("Internal error."),
     }
 }
 
@@ -420,7 +426,9 @@ fn hex_string_to_u8_array(hex_string: &str) -> Result<[u8; 32], Error> {
     let bytes = hex::decode(hex_string).unwrap();
 
     if bytes.len() != 32 {
-        return Err(anyhow!("Hexadecimal string must represent exactly 32 bytes"));
+        return Err(anyhow!(
+            "Hexadecimal string must represent exactly 32 bytes"
+        ));
     }
 
     let mut array = [0u8; 32];
@@ -461,8 +469,8 @@ async fn get_current_batch(service: web::Data<NexusApp>) -> impl Responder {
 
 pub async fn start_rpc_server(shared_service: NexusApp) -> impl Send {
     let json_cfg = web::JsonConfig::default()
-    // limit request payload size
-    .limit(1800000000);
+        // limit request payload size
+        .limit(1800000000);
 
     HttpServer::new(move || {
         App::new()
