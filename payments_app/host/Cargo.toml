@@ -9,7 +9,7 @@ serde = "1.0"
 nft_core = { path = "../../core", features = ["native"] }
 primitive-types = "0.12.1"
 payments-methods = { path = "../methods" }
-sparse-merkle-tree = { path = "../../../sparse-merkle-tree" }
+sparse-merkle-tree = { git = "https://github.com/vibhurajeev/sparse-merkle-tree.git" }
 tokio = "1.30.0"
 warp = "0.3.6"
 parity-scale-codec = "3.6.5"

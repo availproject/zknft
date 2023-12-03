@@ -9,7 +9,7 @@ serde = { version = "1.0", features = ["derive"] }
 nft_core = { path = "../../core", features = ["native"] }
 primitive-types = { version = "0.12.1", default-features = false, features = ["serde"] }
 nft-methods = { path = "../methods" }
-sparse-merkle-tree = { path = "../../../sparse-merkle-tree" }
+sparse-merkle-tree = { git = "https://github.com/vibhurajeev/sparse-merkle-tree.git" }
 tokio = "1.30.0"
 actix-web = "4.3.1"
 serde_json = "1.0.107"

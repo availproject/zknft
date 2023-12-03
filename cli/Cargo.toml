@@ -1,5 +1,5 @@
 [package]
-name = "marketplace"
+name = "zknft-cli"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,7 +11,7 @@ nft_core = { path = "../core", features = ["native"] }
 reqwest = "0.11.20"
 tokio = "1.32.0"
 serde_json = "1.0.105"
-sparse-merkle-tree = { path = "../../sparse-merkle-tree" }
+sparse-merkle-tree = { git = "https://github.com/vibhurajeev/sparse-merkle-tree.git" }
 primitive-types = { version = "0.12.1", default-features = false, features = ["serde"] }
 serde = "1.0.188"
 futures = "0.3.28"
