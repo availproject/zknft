@@ -5,6 +5,7 @@ use nft_core::{
     zkvm_state_machine::ZKStateMachine
 };
 use risc0_zkvm::guest::env;
+use nft_core::nft::types::NftTransaction;
 
 risc0_zkvm::guest::entry!(main);
 
