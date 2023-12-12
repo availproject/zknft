@@ -10,6 +10,7 @@ use anyhow::{anyhow, Error};
 use sparse_merkle_tree::traits::Value;
 use sparse_merkle_tree::MerkleProof;
 use sparse_merkle_tree::H256;
+use std::convert::TryFrom;
 
 pub struct PaymentsStateMachine {
     pub state: VmState<Account>,
@@ -31,7 +32,7 @@ impl StateMachine<Account, PaymentsTransaction> for PaymentsStateMachine {
         params: PaymentsTransaction,
         aggregated_proof: AggregatedBatch,
     ) -> Result<(StateUpdate<Account>, TransactionReceipt), Error> {
-        let message: TransactionMessage = TransactionMessage::try_from(params.clone())?;
+        let message: TransactionMessage = TryFrom::try_from(params.clone())?;
         let from_address_key = message.from.get_key();
         let to_address_key = message.to.get_key();
 
