@@ -1,4 +1,8 @@
-fn main() {
+use std::fs::File;
+use std::io::Write;
+use std::io::Error;
+
+fn main() -> Result<(), Error> {
     let mut csprng = OsRng;
     let signing_key: SigningKey = SigningKey::generate(&mut csprng);
 
@@ -10,7 +14,8 @@ fn main() {
     });
 
     // Create a new JSON file and write the data to it
-    let mut file = File::create("keypair.json").unwrap();
-    file.write_all(serde_json::to_string_pretty(&json_data).unwrap().as_bytes())
-        .unwrap();
+    let mut file = File::create("keypair.json")?;
+    file.write_all(serde_json::to_string_pretty(&json_data)?.as_bytes())?;
+
+    Ok(())
 }
