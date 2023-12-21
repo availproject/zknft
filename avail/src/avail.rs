@@ -10,6 +10,7 @@ use codec::Encode;
 use core::fmt::{Display, Formatter};
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::hash::Hash;
 use std::str::FromStr;
 

@@ -94,9 +94,12 @@ async fn send_post_request<T: Serialize + DeserializeOwned>(
     // Simulate some processing time
     //tokio::time::sleep(Duration::from_secs(2)).await;
 
-    println!("POST request to {} with body completed.", url);
-
-    Ok(())
+    if response.status().is_success() {
+        println!("POST request to {} with body completed.", url);
+        Ok(())
+    } else {
+        Err(Error::new(ErrorKind::Other, "POST request failed"))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
@@ -122,9 +125,11 @@ async fn send_get_request<T: Serialize + DeserializeOwned, R: Serialize + Deseri
     // Send the POST request with the JSON body
     let response = client.get(url).send().await?;
 
-    let parsed_response: R = response.json().await?;
-
-    println!("GET request to {} with body completed.", base_url);
-
-    Ok(parsed_response)
+    if response.status().is_success() {
+        let parsed_response: R = response.json().await.map_err(|_| Error::new(ErrorKind::Other, "Failed to deserialize response"))?;
+        println!("GET request to {} with body completed.", base_url);
+        Ok(parsed_response)
+    } else {
+        Err(Error::new(ErrorKind::Other, "GET request failed"))
+    }
 }

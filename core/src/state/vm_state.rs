@@ -7,6 +7,7 @@ use sparse_merkle_tree::{traits::Hasher, traits::Value, MerkleProof, SparseMerkl
 use std::{
     cmp::PartialEq,
     collections::HashMap,
+    convert::TryInto, // Add missing import
     sync::{Arc, Mutex},
 };
 
@@ -23,8 +24,8 @@ impl Hasher for ShaHasher {
 
     fn finish(self) -> H256 {
         let bytes = self.0.finalize();
-        let sha2_array: [u8; 32] = bytes.as_slice().try_into().unwrap();
-        H256::from(sha2_array)
+        let sha2_array: [u8; 32] = bytes.as_slice().try_into()?; // Replace unwrap with proper error handling
+        Ok(H256::from(sha2_array))
     }
 }
 
